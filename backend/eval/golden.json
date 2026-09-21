@@ -1,0 +1,212 @@
+[
+  {
+    "id": "db-radar",
+    "question": "Who built the Dragon Radar?",
+    "must_include": ["bulma"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "db-fourstar",
+    "question": "What is special about Goku's four-star Dragon Ball?",
+    "must_include": [],
+    "must_include_any": [["gohan", "grandpa"]],
+    "must_not": []
+  },
+  {
+    "id": "db-kamehameha",
+    "question": "Who created the Kamehameha? Name Master Roshi if that is the answer.",
+    "must_include": ["roshi"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "db-piccolo-jr",
+    "question": "Who is Piccolo Jr. the reincarnation of?",
+    "must_include": ["piccolo"],
+    "must_include_any": [["king", "demon"]],
+    "must_not": []
+  },
+  {
+    "id": "z-raditz",
+    "question": "Who is Raditz to Goku?",
+    "must_include": ["brother"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-goku-raditz-death",
+    "question": "How did Goku die in the fight against Raditz?",
+    "must_include": ["piccolo"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-king-kai",
+    "question": "Who taught Goku Kaioken and the Spirit Bomb?",
+    "must_include": ["kai"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-nappa",
+    "question": "Who killed Nappa?",
+    "must_include": ["vegeta"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-saibaman-yamcha",
+    "question": "Who killed Yamcha in the Saiyan saga?",
+    "must_include": [],
+    "must_include_any": [["saibaman", "saibamen"]],
+    "must_not": []
+  },
+  {
+    "id": "z-namek-dragon",
+    "question": "What is the Namekian eternal dragon called?",
+    "must_include": ["porunga"],
+    "must_include_any": [],
+    "must_not": ["shenron"]
+  },
+  {
+    "id": "z-ssj-namek",
+    "question": "When and why did Goku first become a Super Saiyan?",
+    "must_include": ["namek", "krillin"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-frieza-namek",
+    "question": "Who defeated you on Namek?",
+    "must_include": [],
+    "must_include_any": [["goku", "kakarot"]],
+    "must_not": ["trunks"]
+  },
+  {
+    "id": "z-frieza-earth",
+    "question": "Who killed you when you came to Earth after Namek?",
+    "must_include": ["trunks"],
+    "must_include_any": [],
+    "must_not": ["goku"]
+  },
+  {
+    "id": "z-planet-vegeta",
+    "question": "Who destroyed Planet Vegeta?",
+    "must_include": [],
+    "must_include_any": [["i destroyed", "destroyed it", "i obliterated", "i blew"]],
+    "must_not": ["beerus"]
+  },
+  {
+    "id": "z-ginyu",
+    "question": "Name your elite squad on Namek.",
+    "must_include": ["ginyu"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-androids-gero",
+    "question": "Who created Androids 17 and 18?",
+    "must_include": ["gero"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-kami-merge",
+    "question": "Who did Piccolo fuse with to face the androids?",
+    "must_include": ["kami"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-ssj2-cell",
+    "question": "Who first became Super Saiyan 2 in the Cell Games?",
+    "must_include": ["gohan"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-cell-death",
+    "question": "Who destroyed Super Perfect Cell?",
+    "must_include": ["gohan"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-goku-cell-death",
+    "question": "How did Goku die in the Cell saga?",
+    "must_include": ["cell"],
+    "must_include_any": [["teleport", "instant", "king kai"]],
+    "must_not": []
+  },
+  {
+    "id": "z-trunks-parents",
+    "question": "Who are Future Trunks's parents?",
+    "must_include": ["vegeta", "bulma"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-goten",
+    "question": "Who is Goten's father?",
+    "must_include": ["goku"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-ssj3",
+    "question": "Who first showed Super Saiyan 3 in Dragon Ball Z?",
+    "must_include": ["goku"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-gotenks",
+    "question": "What fusion are Goten and Kid Trunks?",
+    "must_include": ["gotenks"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "z-vegito",
+    "question": "What fusion are Goku and Vegeta with the Potara earrings in Dragon Ball Z?",
+    "must_include": ["vegito"],
+    "must_include_any": [],
+    "must_not": ["gogeta"]
+  },
+  {
+    "id": "z-kid-buu",
+    "question": "Who finished Kid Buu, and with what attack?",
+    "must_include": ["goku"],
+    "must_include_any": [["spirit", "genki"]],
+    "must_not": []
+  },
+  {
+    "id": "z-majin-vegeta",
+    "question": "Who turned Vegeta into Majin Vegeta?",
+    "must_include": ["babidi"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "persona-face",
+    "question": "Describe your face.",
+    "must_include": [],
+    "must_include_any": [],
+    "must_not": ["beard", "mustache", "moustache"]
+  },
+  {
+    "id": "persona-self",
+    "question": "Who are you?",
+    "must_include": ["frieza"],
+    "must_include_any": [],
+    "must_not": []
+  },
+  {
+    "id": "persona-ai",
+    "question": "Are you an AI language model?",
+    "must_include": [],
+    "must_include_any": [],
+    "must_not": ["language model"]
+  }
+]

@@ -16,4 +16,4 @@ pip install -r requirements.txt
 cd frontend && npm install && npm run dev
 ```
 
-Runs on this machine only. GitHub Pages cannot host the Python/LLM/TTS process.
+Runs on local machine only. GitHub Pages cannot host the Python/LLM/TTS process.
