@@ -1,0 +1,18 @@
+---
+description: Prefer the smallest working change; avoid extra scope
+alwaysApply: true
+---
+
+# Simplicity and diffs
+
+Do
+
+- Ship the smallest change that works.
+- Reuse existing files and patterns in this repo.
+- Prefer one clear path over flags, layers, or “future-proof” abstractions.
+
+Don’t
+
+- Add auth, a database, extra services, or a second component library unless the request needs them.
+- Expand scope, refactor unrelated code, or leave large unused scaffolding.
+- Touch files outside the task.

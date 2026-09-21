@@ -1,0 +1,16 @@
+---
+description: Python backend, TypeScript frontend, OpenAPI-generated types
+alwaysApply: true
+---
+
+# Stack
+
+- Backend: Python. Owns the chat API, local LLM, and TTS.
+- Frontend: TypeScript. UI only; talks to the Python API.
+- Contracts: OpenAPI (or equivalent schema) on the backend generates TypeScript request/response types for the frontend.
+
+Don’t
+
+- Run a TypeScript backend (or a second API in Node) just to share types.
+- Duplicate models by hand on both sides when generation exists.
+- Move LLM or TTS into the browser or a cloud host.

@@ -1,0 +1,18 @@
+---
+description: Frontend uses generated OpenAPI types; no TS backend
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# TypeScript frontend
+
+Do
+
+- Use generated types from the backend OpenAPI for request/response shapes.
+- Keep UI state in the frontend; keep model/TTS work on the Python API.
+- Cover empty, loading, and error states with real copy.
+
+Don’t
+
+- Define a parallel TypeScript backend or duplicate API models by hand.
+- Hard-code secrets or remote LLM endpoints.

@@ -1,0 +1,17 @@
+---
+description: Never git commit or push unless the user explicitly asks
+alwaysApply: true
+---
+
+# Git
+
+Do
+
+- Leave commits and pushes to the user unless they explicitly ask for that action in the current request.
+- Stage only files they asked to change, when they do ask to commit.
+
+Don’t
+
+- Auto-commit, amend, or push.
+- Create PRs/MRs unless they explicitly ask.
+- Rewrite history or force-push.

@@ -1,0 +1,16 @@
+---
+description: LLM and TTS stay on this machine; no cloud runtime default
+alwaysApply: true
+---
+
+# Local LLM and TTS
+
+Do
+
+- Run the LLM and TTS on this machine.
+- Treat GitHub as source (optional static frontend host). The Python/LLM/TTS app cannot run on GitHub Pages.
+
+Don’t
+
+- Depend on a cloud clone or remote GPU as the default runtime.
+- Send chat content or audio to third-party APIs unless the user explicitly asks.

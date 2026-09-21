@@ -1,0 +1,19 @@
+---
+description: Python API, local LLM, TTS, and OpenAPI schemas
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python backend
+
+Do
+
+- Keep the API, LLM calls, and TTS in Python.
+- Expose a small HTTP API the frontend can call.
+- Publish OpenAPI (or Pydantic/FastAPI schemas) so TypeScript types can be generated.
+
+Don’t
+
+- Call paid/cloud LLM or TTS APIs unless the user explicitly asks.
+- Put secrets in code or commit `.env` files.
+- Split into microservices for this app.

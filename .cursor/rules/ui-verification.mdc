@@ -1,0 +1,20 @@
+---
+description: Verify UI changes in the browser, not appearance-only
+globs: "**/*.{ts,tsx,css}"
+alwaysApply: false
+---
+
+# UI verification
+
+When you change UI, layout, styling, routing, client state, or rendered data:
+
+Do
+
+- Exercise the flow in the browser (click, type, submit, navigate). Appearance-only screenshots are not enough.
+- Check other pages that share the state or components you touched.
+- Check empty, loading, and error states; desktop and mobile if layout changed.
+
+Don’t
+
+- Declare UI work done from code review or a single screenshot alone.
+- If the browser is unavailable, use the closest substitute (tests, curl, render script) and say what you could not verify.
