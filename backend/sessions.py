@@ -19,7 +19,7 @@ def preview_of(messages):
 def load_index():
     if not INDEX_FILE.exists():
         return {"current": None, "sessions": []}
-        return json.loads(INDEX_FILE.read_text())
+    return json.loads(INDEX_FILE.read_text())
 
 def save_index(index):
     CHATS_DIR.mkdir(parents=True, exist_ok=True)

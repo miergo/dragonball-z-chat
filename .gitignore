@@ -10,3 +10,5 @@ dist/
 .next/
 *.tsbuildinfo
 .DS_Store
+backend/chats/
+

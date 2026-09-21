@@ -8,6 +8,8 @@ from sessions import (
     save_session,
     session_path,
 )
+from tts import speak
+
 
 MODEL = "kwangsuklee/Qwen3.5-9B.Q4_K_M-Claude-4.6-Opus-Reasoning-Distilled-v2:latest"
 SYSTEM = {
@@ -70,6 +72,7 @@ def main():
         messages.append({"role": "assistant", "content": text})
         save_session(session_id, messages, index)
         print(f"LLM: {text}\n")
+        speak(text)
 
 
 if __name__ == "__main__":
