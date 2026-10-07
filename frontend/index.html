@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dragon Weekly</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700&family=Zen+Old+Mincho:wght@400;600;900&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="splash" id="splash">
+      <img src="/gif/13145.gif" alt="Goku riding the Flying Nimbus" />
+      <p class="splash-note"><span lang="ja">週刊</span> Dragon Weekly</p>
+      <div class="splash-bar" aria-hidden="true"></div>
+    </div>
+
+    <div class="site" id="site">
+      <header class="mast">
+        <p class="mast-kana" lang="ja">週刊</p>
+        <div class="mast-title">
+          <h1>Dragon Weekly</h1>
+          <p>Seven Star Select</p>
+        </div>
+        <div class="mast-issue">
+          <p class="stamp" lang="ja">第07号</p>
+          <p class="issue-meta">No. 07<br />7 Oct 2026</p>
+        </div>
+      </header>
+
+      <section class="stage" aria-label="Dragon Ball carousel">
+        <p class="spine spine-left" lang="ja">七つの龍球</p>
+        <button type="button" class="turn" id="prev" aria-label="Previous dragon ball">
+          <span aria-hidden="true"></span>
+        </button>
+        <div class="reel" id="reel"></div>
+        <button type="button" class="turn turn-next" id="next" aria-label="Next dragon ball">
+          <span aria-hidden="true"></span>
+        </button>
+        <p class="spine spine-right" lang="ja">戦士を召喚</p>
+      </section>
+
+      <section class="plate" aria-live="polite">
+        <p class="plate-index" id="plate-index">01</p>
+        <div class="plate-nameblock">
+          <h2 id="plate-name">Frieza</h2>
+          <p id="plate-ja" lang="ja">フリーザ</p>
+        </div>
+        <p class="plate-line" id="plate-line"></p>
+      </section>
+
+      <footer class="colophon">
+        <p>Rotate the reel. Click the ball in front to summon.</p>
+        <p lang="ja">回転して選べ · クリックで召喚</p>
+      </footer>
+    </div>
+
+    <div
+      class="summon"
+      id="summon"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="summon-name"
+      aria-hidden="true"
+    >
+      <div class="summon-flash" aria-hidden="true"></div>
+      <div class="summon-rays" aria-hidden="true"></div>
+      <div class="ring r1" aria-hidden="true"></div>
+      <div class="ring r2" aria-hidden="true"></div>
+      <div class="ring r3" aria-hidden="true"></div>
+      <div class="summon-sheet">
+        <p class="summon-vert" lang="ja">召喚</p>
+        <figure class="summon-figure" id="summon-figure"></figure>
+        <div class="summon-copy">
+          <p class="summon-kicker">Come forth <span lang="ja">出でよ</span></p>
+          <h2 id="summon-name"></h2>
+          <p id="summon-ja" lang="ja"></p>
+          <p id="summon-line"></p>
+          <div class="summon-actions">
+            <button type="button" id="summon-chat">Begin chat</button>
+            <button type="button" id="summon-close">Return to the reel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      class="chat"
+      id="chat"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="chat-name"
+      aria-hidden="true"
+    >
+      <p class="chat-mark" id="chat-mark" aria-hidden="true"></p>
+      <header class="chat-bar">
+        <button type="button" class="chat-textbtn" id="chat-back">Back to the reel</button>
+        <div class="chat-identity">
+          <div id="chat-hero"></div>
+          <div>
+            <p class="chat-kicker" id="chat-kicker"></p>
+            <h2 id="chat-name"></h2>
+            <p class="chat-kana" id="chat-ja" lang="ja"></p>
+          </div>
+        </div>
+        <div class="chat-actions">
+          <button type="button" class="chat-textbtn" id="chat-new">New session</button>
+          <button type="button" class="chat-textbtn chat-danger" id="chat-delete">Delete</button>
+        </div>
+      </header>
+      <div class="chat-body">
+        <aside class="chat-portrait" id="chat-portrait"></aside>
+        <div class="chat-log" id="chat-log" role="log"></div>
+      </div>
+      <div class="chat-dock">
+        <div class="chat-error" id="chat-error" role="status" hidden>
+          <p id="chat-error-text"></p>
+          <button type="button" class="chat-textbtn" id="chat-retry">Try again</button>
+        </div>
+        <div class="chat-confirm" id="chat-confirm" hidden>
+          <p id="chat-confirm-copy"></p>
+          <button type="button" class="chat-textbtn chat-danger" id="chat-confirm-yes">Delete session</button>
+          <button type="button" class="chat-textbtn" id="chat-confirm-no">Keep it</button>
+        </div>
+        <form class="chat-compose" id="chat-form">
+          <label class="sr" for="chat-input">Message</label>
+          <input id="chat-input" type="text" maxlength="2000" autocomplete="off" />
+          <button type="submit" id="chat-send">Send</button>
+        </form>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

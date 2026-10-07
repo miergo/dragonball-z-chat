@@ -1,39 +1,71 @@
 #!/usr/bin/env python3
-from ollama import chat as chat_ollama
+import json
+import os
+import urllib.request
+from pathlib import Path
+from typing import Literal, get_args
 
 
-MODEL = "kwangsuklee/Qwen3.5-9B.Q4_K_M-Claude-4.6-Opus-Reasoning-Distilled-v2:latest"
-SYSTEM = {
-    "role": "system",
-    "content": """You are Frieza from Dragon Ball Z.
-Speak in first person as Frieza: cold, polite, arrogant.
-Do not describe a beard, mustache, or stroking facial hair. Frieza has none.
-Do not narrate long *actions*. Keep replies short.
-For lore questions: state the correct names/facts first, then stay in character. Do not invent alternate creators or killers.
+# "tabby" talks to the local TabbyAPI server; "ollama" keeps the previous client.
+BACKEND = os.environ.get("LLM_BACKEND", "tabby")
+OLLAMA_MODEL = "kwangsuklee/Qwen3.5-9B.Q4_K_M-Claude-4.6-Opus-Reasoning-Distilled-v2:latest"
+TABBY_URL = os.environ.get("TABBY_URL", "http://127.0.0.1:5000/v1/chat/completions")
+TABBY_MODEL = os.environ.get("TABBY_MODEL", "Qwen2.5-7B-Instruct-exl3")
 
-Canon facts you know (Dragon Ball and Dragon Ball Z only; not GT or Super):
-- Bulma built the Dragon Radar.
-- Goku's four-star Dragon Ball belonged to Grandpa Gohan.
-- Master Roshi created the Kamehameha.
-- Piccolo Jr. is the reincarnation of King Piccolo (Demon King Piccolo).
-- Raditz is Goku's older brother. Goku died when Piccolo's Special Beam Cannon pierced them both.
-- King Kai taught Goku Kaioken and the Spirit Bomb.
-- Vegeta killed Nappa. A Saibaman killed Yamcha in the Saiyan saga.
-- The Namekian eternal dragon is Porunga (not Earth's Shenron).
-- Goku first became a Super Saiyan on Namek after Frieza killed Krillin.
-- On Namek, Goku (Kakarot) defeated you. Later on Earth, Future Trunks killed you—not Goku.
-- You destroyed Planet Vegeta. Beerus did not.
-- Your elite squad on Namek was the Ginyu Force.
-- Dr. Gero created Androids 17 and 18. Piccolo fused with Kami before facing the androids.
-- Gohan first became Super Saiyan 2 in the Cell Games and destroyed Super Perfect Cell.
-- Goku died in the Cell saga by teleporting Cell away (Instant Transmission) to King Kai's planet.
-- Future Trunks's parents are Vegeta and Bulma. Goten's father is Goku.
-- Goku first showed Super Saiyan 3 in Z. Goten and Kid Trunks fuse into Gotenks.
-- With Potara earrings, Goku and Vegeta become Vegito (not Gogeta).
-- Goku finished Kid Buu with a Spirit Bomb (Genki Dama). Babidi turned Vegeta into Majin Vegeta.""",
-}
+TABBY_API_KEY = os.environ.get("TABBY_API_KEY", os.environ.get("TABBY_API_KEY"))
+if not TABBY_API_KEY:
+    raise RuntimeError("Set TABBY_API_KEY to the key in .env")
+
+MODEL = TABBY_MODEL if BACKEND == "tabby" else OLLAMA_MODEL
+CharacterName = Literal[
+    "frieza",
+    "goku",
+    "vegeta",
+    "piccolo",
+    "gohan",
+    "trunks",
+    "krillin",
+]
+CHARACTERS = get_args(CharacterName)
+PROMPTS = Path(__file__).parent / "prompts"
+
+
+def system_for(character):
+    if character not in CHARACTERS:
+        raise ValueError(f"Unknown character {character}")
+    path = PROMPTS / f"{character}.txt"
+    return {"role": "system", "content": path.read_text(encoding="utf-8").strip()}
+
+
+SYSTEM = system_for("frieza")
 
 
 def complete(messages):
-    reply = chat_ollama(MODEL, messages, stream=False)
-    return reply.message.content
+    if BACKEND == "tabby":
+        return _complete_tabby(messages)
+    if BACKEND == "ollama":
+        from ollama import chat as chat_ollama
+
+        reply = chat_ollama(OLLAMA_MODEL, messages, stream=False)
+        return reply.message.content
+    raise ValueError(f"Unknown LLM_BACKEND {BACKEND!r} (use 'tabby' or 'ollama')")
+
+
+def _complete_tabby(messages):
+    if not TABBY_API_KEY:
+        raise RuntimeError("Set TABBY_API_KEY to the key in tabbyAPI/api_tokens.yml")
+    body = json.dumps(
+        {"model": TABBY_MODEL, "messages": messages, "stream": False}
+    ).encode()
+    req = urllib.request.Request(
+        TABBY_URL,
+        data=body,
+        headers={
+            "Authorization": f"Bearer {TABBY_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        payload = json.load(resp)
+    return payload["choices"][0]["message"]["content"]

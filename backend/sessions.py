@@ -1,14 +1,28 @@
-import json
+import sqlite3
 from pathlib import Path
 
 CHATS_DIR = Path(__file__).parent / "chats"
-INDEX_FILE = CHATS_DIR / "index.json"
+DB_PATH = CHATS_DIR / "chat.sqlite"
 
-def session_path(session_id):
-    return CHATS_DIR / f"{session_id}.json"
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY,
+    preview TEXT NOT NULL,
+    character TEXT NOT NULL DEFAULT 'frieza'
+);
+CREATE TABLE IF NOT EXISTS messages (
+    session_id INTEGER NOT NULL REFERENCES sessions(id),
+    position INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    PRIMARY KEY (session_id, position)
+);
+CREATE TABLE IF NOT EXISTS app_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+"""
 
-def new_messages(system):
-    return [system.copy()]
 
 def preview_of(messages):
     for msg in messages:
@@ -16,40 +30,220 @@ def preview_of(messages):
             return msg.get("content")[:60]
     return "No Messages"
 
-def load_index():
-    if not INDEX_FILE.exists():
-        return {"current": None, "sessions": []}
-    return json.loads(INDEX_FILE.read_text())
 
-def save_index(index):
-    CHATS_DIR.mkdir(parents=True, exist_ok=True)
-    INDEX_FILE.write_text(json.dumps(index, indent=2))
-    
-def next_session_id(index):
-    ids = [int(row["id"]) for row in index["sessions"]]
-    return str(max(ids) + 1) if ids else "1"
+def connect():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH, timeout=5)
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+
+def init_db():
+    conn = connect()
+    try:
+        conn.executescript(SCHEMA)
+        cols = [row[1] for row in conn.execute("PRAGMA table_info(sessions)")]
+        if "character" not in cols:
+            conn.execute(
+                "ALTER TABLE sessions ADD COLUMN character TEXT NOT NULL DEFAULT 'frieza'"
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _session_id(session_id):
+    try:
+        return int(session_id)
+    except (TypeError, ValueError):
+        raise LookupError(f"No session {session_id}") from None
+
+
+def _require_message(msg):
+    if "role" not in msg or "content" not in msg:
+        raise ValueError("message missing role or content")
+    if not isinstance(msg["role"], str) or not isinstance(msg["content"], str):
+        raise ValueError("message role and content must be strings")
+
+
+def _set_current(conn, session_id):
+    conn.execute(
+        """
+        INSERT INTO app_state (key, value) VALUES ('current', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        """,
+        (str(session_id),),
+    )
+
+
+def _replace_messages(conn, session_id, messages):
+    conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+    for position, msg in enumerate(messages):
+        _require_message(msg)
+        conn.execute(
+            """
+            INSERT INTO messages (session_id, position, role, content)
+            VALUES (?, ?, ?, ?)
+            """,
+            (session_id, position, msg["role"], msg["content"]),
+        )
+
+
+def current_session_id():
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT value FROM app_state WHERE key = 'current'"
+        ).fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def session_exists(session_id):
+    try:
+        sid = int(session_id)
+    except (TypeError, ValueError):
+        return False
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def list_sessions():
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT id, preview FROM sessions ORDER BY id"
+        ).fetchall()
+        return [{"id": str(row[0]), "preview": row[1]} for row in rows]
+    finally:
+        conn.close()
+
 
 def load_session(session_id):
-    data = json.loads(session_path(session_id).read_text())
-    return data["messages"]
+    sid = _session_id(session_id)
+    conn = connect()
+    try:
+        found = conn.execute(
+            "SELECT 1 FROM sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        if found is None:
+            raise LookupError(f"No session {session_id}")
+        rows = conn.execute(
+            """
+            SELECT role, content FROM messages
+            WHERE session_id = ?
+            ORDER BY position
+            """,
+            (sid,),
+        ).fetchall()
+        return [{"role": role, "content": content} for role, content in rows]
+    finally:
+        conn.close()
 
 
-def save_session(session_id, messages, index):
-    CHATS_DIR.mkdir(parents=True, exist_ok=True)
-    session_path(session_id).write_text(
-        json.dumps({"id": session_id, "messages": messages}, indent=2)
-    )
-    index["current"] = session_id
-    for row in index["sessions"]:
-        if row["id"] == session_id:
-            row["preview"] = preview_of(messages)
-            save_index(index)
-            return
-    index["sessions"].append({"id": session_id, "preview": preview_of(messages)})
-    save_index(index)
-    
-def create_session(index, system):
-    session_id = next_session_id(index)
-    messages = new_messages(system)
-    save_session(session_id, messages, index)
-    return session_id, messages
+def session_character(session_id):
+    sid = _session_id(session_id)
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT character FROM sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        if row is None:
+            raise LookupError(f"No session {session_id}")
+        return row[0]
+    finally:
+        conn.close()
+
+
+def latest_session_id(character):
+    conn = connect()
+    try:
+        row = conn.execute(
+            "SELECT id FROM sessions WHERE character = ? ORDER BY id DESC LIMIT 1",
+            (character,),
+        ).fetchone()
+        return str(row[0]) if row else None
+    finally:
+        conn.close()
+
+
+def delete_session(session_id):
+    sid = _session_id(session_id)
+    conn = connect()
+    try:
+        with conn:
+            found = conn.execute(
+                "SELECT 1 FROM sessions WHERE id = ?", (sid,)
+            ).fetchone()
+            if found is None:
+                raise LookupError(f"No session {session_id}")
+            conn.execute("DELETE FROM messages WHERE session_id = ?", (sid,))
+            conn.execute("DELETE FROM sessions WHERE id = ?", (sid,))
+            current = conn.execute(
+                "SELECT value FROM app_state WHERE key = 'current'"
+            ).fetchone()
+            if current and current[0] == str(sid):
+                conn.execute("DELETE FROM app_state WHERE key = 'current'")
+    finally:
+        conn.close()
+
+
+def set_current(session_id):
+    sid = _session_id(session_id)
+    conn = connect()
+    try:
+        with conn:
+            found = conn.execute(
+                "SELECT 1 FROM sessions WHERE id = ?", (sid,)
+            ).fetchone()
+            if found is None:
+                raise LookupError(f"No session {session_id}")
+            _set_current(conn, sid)
+    finally:
+        conn.close()
+
+
+def save_session(session_id, messages):
+    sid = _session_id(session_id)
+    conn = connect()
+    try:
+        with conn:
+            found = conn.execute(
+                "SELECT 1 FROM sessions WHERE id = ?", (sid,)
+            ).fetchone()
+            if found is None:
+                raise LookupError(f"No session {session_id}")
+            _replace_messages(conn, sid, messages)
+            conn.execute(
+                "UPDATE sessions SET preview = ? WHERE id = ?",
+                (preview_of(messages), sid),
+            )
+            _set_current(conn, sid)
+    finally:
+        conn.close()
+
+
+def create_session(system, character="frieza"):
+    messages = [system.copy()]
+    _require_message(messages[0])
+    conn = connect()
+    try:
+        with conn:
+            cur = conn.execute(
+                "INSERT INTO sessions (preview, character) VALUES (?, ?)",
+                (preview_of(messages), character),
+            )
+            sid = cur.lastrowid
+            _replace_messages(conn, sid, messages)
+            _set_current(conn, sid)
+        return str(sid), messages
+    finally:
+        conn.close()
