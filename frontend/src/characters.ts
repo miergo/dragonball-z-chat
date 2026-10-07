@@ -36,7 +36,7 @@ export const fighters: Fighter[] = [
     title: "Emperor",
     line: "Cold courtesy, and a wish he intends to keep.",
     color: "#9b5de5",
-    image: "/ref/pngaaa.com-31364.png",
+    image: `${import.meta.env.BASE_URL}ref/pngaaa.com-31364.png`,
   },
   soon(2),
   soon(3),
