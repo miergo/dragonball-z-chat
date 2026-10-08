@@ -9,15 +9,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from model import CHARACTERS, CharacterName, complete, system_for
+from rag import IndexMissing, with_canon, wrap_trace
 from sessions import (
     create_session,
     delete_session,
+    dialogue,
     init_db,
     latest_session_id,
+    list_sessions,
     load_session,
     save_session,
     session_character,
-    set_current,
 )
 
 GREET = {
@@ -38,6 +40,11 @@ class SessionOut(BaseModel):
     id: str
     character: CharacterName
     messages: list[ChatMessage]
+
+
+class SessionSummary(BaseModel):
+    id: str
+    preview: str
 
 
 class CreateSessionIn(BaseModel):
@@ -74,16 +81,31 @@ def _missing(exc):
     raise HTTPException(status_code=404, detail="That session is gone.") from exc
 
 
+def _complete_with_canon(messages):
+    return complete(with_canon(messages))
+
+
+_complete_with_canon = wrap_trace(_complete_with_canon, "retrieve_and_complete")
+
+
+def _model_messages(session_id, messages):
+    return [system_for(session_character(session_id)), *dialogue(messages)]
+
+
 def _answer(session_id, messages):
+    turns = dialogue(messages)
     try:
-        text = visible_reply(complete(messages))
+        text = visible_reply(_complete_with_canon(_model_messages(session_id, turns)))
+    except IndexMissing as exc:
+        print(f"model error: {type(exc).__name__}", file=sys.stderr)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         print(f"model error: {type(exc).__name__}", file=sys.stderr)
         raise HTTPException(
             status_code=502, detail="The local model didn't answer."
         ) from exc
-    messages.append({"role": "assistant", "content": text})
-    save_session(session_id, messages)
+    turns.append({"role": "assistant", "content": text})
+    save_session(session_id, turns)
     return _view(session_id)
 
 
@@ -110,14 +132,18 @@ def health():
     return {"ok": True, "characters": list(CHARACTERS)}
 
 
+@app.get("/sessions", response_model=list[SessionSummary])
+def get_sessions(character: CharacterName):
+    return list_sessions(character)
+
+
 @app.post("/sessions", response_model=SessionOut)
 def open_session(body: CreateSessionIn, fresh: bool = False):
     if not fresh:
         existing = latest_session_id(body.character)
         if existing:
-            set_current(existing)
             return _view(existing)
-    session_id, _messages = create_session(system_for(body.character), body.character)
+    session_id, _messages = create_session(body.character)
     return _view(session_id)
 
 
@@ -156,17 +182,18 @@ def greet(session_id: str):
         messages = load_session(session_id)
     except LookupError as exc:
         _missing(exc)
-    if any(msg["role"] != "system" for msg in messages):
+    turns = dialogue(messages)
+    if turns:
         return _view(session_id)
     try:
-        text = visible_reply(complete(messages + [GREET]))
+        text = visible_reply(complete(_model_messages(session_id, turns) + [GREET]))
     except Exception as exc:
         print(f"model error: {type(exc).__name__}", file=sys.stderr)
         raise HTTPException(
             status_code=502, detail="The local model didn't answer."
         ) from exc
-    messages.append({"role": "assistant", "content": text})
-    save_session(session_id, messages)
+    turns.append({"role": "assistant", "content": text})
+    save_session(session_id, turns)
     return _view(session_id)
 
 

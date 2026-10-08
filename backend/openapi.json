@@ -22,6 +22,48 @@
       }
     },
     "/sessions": {
+      "get": {
+        "summary": "Get Sessions",
+        "operationId": "get_sessions_sessions_get",
+        "parameters": [
+          {
+            "name": "character",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "const": "frieza",
+              "type": "string",
+              "title": "Character"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionSummary"
+                  },
+                  "title": "Response Get Sessions Sessions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "summary": "Open Session",
         "operationId": "open_session_sessions_post",
@@ -257,15 +299,7 @@
         "properties": {
           "character": {
             "type": "string",
-            "enum": [
-              "frieza",
-              "goku",
-              "vegeta",
-              "piccolo",
-              "gohan",
-              "trunks",
-              "krillin"
-            ],
+            "const": "frieza",
             "title": "Character"
           }
         },
@@ -311,15 +345,7 @@
           },
           "character": {
             "type": "string",
-            "enum": [
-              "frieza",
-              "goku",
-              "vegeta",
-              "piccolo",
-              "gohan",
-              "trunks",
-              "krillin"
-            ],
+            "const": "frieza",
             "title": "Character"
           },
           "messages": {
@@ -337,6 +363,24 @@
           "messages"
         ],
         "title": "SessionOut"
+      },
+      "SessionSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "preview": {
+            "type": "string",
+            "title": "Preview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "preview"
+        ],
+        "title": "SessionSummary"
       },
       "ValidationError": {
         "properties": {

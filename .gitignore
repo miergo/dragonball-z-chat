@@ -11,4 +11,5 @@ dist/
 *.tsbuildinfo
 .DS_Store
 backend/chats/
+backend/canon/index/
 

@@ -12,19 +12,31 @@ OLLAMA_MODEL = "kwangsuklee/Qwen3.5-9B.Q4_K_M-Claude-4.6-Opus-Reasoning-Distille
 TABBY_URL = os.environ.get("TABBY_URL", "http://127.0.0.1:5000/v1/chat/completions")
 TABBY_MODEL = os.environ.get("TABBY_MODEL", "Qwen2.5-7B-Instruct-exl3")
 
-TABBY_API_KEY = os.environ.get("TABBY_API_KEY", os.environ.get("TABBY_API_KEY"))
+
+def _load_env_file():
+    path = Path(__file__).parent / ".env"
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_env_file()
+TABBY_API_KEY = os.environ.get("TABBY_API_KEY")
 if not TABBY_API_KEY:
     raise RuntimeError("Set TABBY_API_KEY to the key in .env")
 
 MODEL = TABBY_MODEL if BACKEND == "tabby" else OLLAMA_MODEL
 CharacterName = Literal[
     "frieza",
-    "goku",
-    "vegeta",
-    "piccolo",
-    "gohan",
-    "trunks",
-    "krillin",
+
 ]
 CHARACTERS = get_args(CharacterName)
 PROMPTS = Path(__file__).parent / "prompts"
@@ -55,7 +67,12 @@ def _complete_tabby(messages):
     if not TABBY_API_KEY:
         raise RuntimeError("Set TABBY_API_KEY to the key in tabbyAPI/api_tokens.yml")
     body = json.dumps(
-        {"model": TABBY_MODEL, "messages": messages, "stream": False}
+        {
+            "model": TABBY_MODEL,
+            "messages": messages,
+            "stream": False,
+            "temperature": 0.65,
+        }
     ).encode()
     req = urllib.request.Request(
         TABBY_URL,

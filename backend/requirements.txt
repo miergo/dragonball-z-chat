@@ -1,2 +1,7 @@
 fastapi>=0.115
 uvicorn>=0.32
+langchain>=0.3
+langchain-text-splitters>=0.3
+langchain-chroma>=0.2
+langchain-huggingface>=0.1
+sentence-transformers>=3.0

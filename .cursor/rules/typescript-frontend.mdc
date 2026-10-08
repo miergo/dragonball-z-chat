@@ -9,7 +9,7 @@ alwaysApply: false
 Do
 
 - Use generated types from the backend OpenAPI for request/response shapes.
-- Keep UI state in the frontend; keep model/TTS work on the Python API.
+- Keep UI state in the frontend; keep model work on the Python API.
 - Cover empty, loading, and error states with real copy.
 
 Don’t

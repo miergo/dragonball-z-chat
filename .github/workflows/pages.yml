@@ -30,6 +30,7 @@ jobs:
         working-directory: frontend
         env:
           PAGES_BASE: /dragonball-z-chat/
+          VITE_FROZEN_CHAT: "1"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/dist

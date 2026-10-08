@@ -112,7 +112,13 @@
         </div>
       </header>
       <div class="chat-body">
-        <aside class="chat-portrait" id="chat-portrait"></aside>
+        <aside class="chat-side">
+          <nav class="chat-history" aria-labelledby="chat-history-title">
+            <p class="chat-history-title" id="chat-history-title">Past sessions</p>
+            <ul class="chat-history-list" id="chat-history"></ul>
+          </nav>
+          <div class="chat-portrait" id="chat-portrait"></div>
+        </aside>
         <div class="chat-log" id="chat-log" role="log"></div>
       </div>
       <div class="chat-dock">

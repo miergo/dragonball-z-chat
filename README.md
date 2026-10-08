@@ -2,11 +2,11 @@
 
 [Open Dragon Weekly](https://miergo.github.io/dragonball-z-chat/)
 
-Local chat app: talk or type about Dragon Ball Z lore. A local LLM answers in a character’s voice; replies are spoken with TTS.
+Local chat app: talk or type about Dragon Ball Z lore. A local LLM answers in a character’s voice.
 
-**Stack:** Python backend (LLM + TTS + API). TypeScript frontend.
+**Stack:** Python backend (LLM + API). TypeScript frontend.
 
-The Pages link is the reel. Chat, the model, and speech run on this machine.
+The Pages link is the reel. Chat and the model run on this machine.
 
 ```bash
 # backend (local)
@@ -27,4 +27,4 @@ Install [TabbyAPI](https://github.com/theroyallab/tabbyAPI) if you want a model 
 Set `LLM_BACKEND=ollama` to use Ollama instead (`pip install ollama`).
 
 
-GitHub Pages cannot host the Python process, the model, or TTS.
+GitHub Pages cannot host the Python process or the model.
