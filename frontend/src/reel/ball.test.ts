@@ -275,14 +275,14 @@ if (!reel) throw new Error("reel mounted");
 const cards = Array.from(reel.querySelectorAll(".card"));
 check(cards.length === fighters.length, "every slot becomes a card");
 check(stars(cards[0]) === 1, "one-star ball still draws its star");
-check(stars(cards[1]) === 2, "a slot with no id still draws its stars");
+check(stars(cards[3]) === 4, "a slot with no id still draws its stars");
 const empty = cards[7];
 check(stars(empty) === 0, "missing star layout draws no stars");
 check(empty.querySelector(".dball-sheen"), "plain ball keeps the sheen");
 check(empty.querySelector(".dball-gloss"), "plain ball keeps the gloss");
 check(empty.querySelector(".dball-stars"), "plain ball keeps the star layer");
 check(stars(cards[8]) === 0, "a star count outside the layout draws a plain ball");
-check(!("id" in fighters[1]) || fighters[1].id === undefined, "coming-soon slot has no id");
+check(!("id" in fighters[3]) || fighters[3].id === undefined, "coming-soon slot has no id");
 check(fighters[7].id === undefined, "empty slot has no id");
 
 export {};

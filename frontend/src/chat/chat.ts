@@ -6,11 +6,13 @@ import {
   openSession,
   sendMessage,
   type ChatMessage,
+  type SendEvent,
+  type Session,
   type SessionSummary,
 } from "../api/api";
-import { STAR_JA, type Fighter } from "../characters/characters";
+import { STAR_JA, fighters, type CharacterId, type Fighter } from "../characters/characters";
 import { setFighterIdentity } from "../characters/identity";
-import { frozenChat, sampleMessages, sampleSession } from "./sample";
+import { frozenChat, sampleFor } from "./sample";
 
 type Phase = "loading" | "greeting" | "ready" | "sending";
 
@@ -72,6 +74,7 @@ export function createChat(opts: { onClose: () => void }) {
   const historyList = document.querySelector<HTMLElement>("#chat-history")!;
 
   let fighter: Fighter | null = null;
+  let partnerId: CharacterId | null = null;
   let sessionId: string | null = null;
   let messages: ChatMessage[] = [];
   let phase: Phase = "ready";
@@ -85,6 +88,8 @@ export function createChat(opts: { onClose: () => void }) {
   let pendingRow: HTMLElement | null = null;
   let pendingBody: HTMLElement | null = null;
   let pendingKind: "loading" | "wait" | null = null;
+  let pendingLabel = "";
+  let pendingNext: CharacterId | null | undefined = undefined;
   let emptyNote: HTMLElement | null = null;
   let historyFlight: AbortController | null = null;
   let historyButtons: { id: string; button: HTMLButtonElement }[] = [];
@@ -108,13 +113,13 @@ export function createChat(opts: { onClose: () => void }) {
       historyNote("No past sessions yet.");
       return;
     }
-    historyButtons = list.map((item) => {
+    historyButtons = list.map((item, index) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "chat-history-item";
       const label = document.createElement("span");
       label.className = "chat-history-id";
-      label.textContent = `Session ${item.id}`;
+      label.textContent = `Session ${list.length - index}`;
       const preview = document.createElement("span");
       preview.className = "chat-history-preview";
       preview.textContent = item.preview === "No Messages" ? "Not started yet" : item.preview;
@@ -153,6 +158,7 @@ export function createChat(opts: { onClose: () => void }) {
     messages = [];
     error = "";
     phase = "loading";
+    forgetPartner();
     const current = ++token;
     render();
     void load(fighter, false, current, id);
@@ -178,7 +184,36 @@ export function createChat(opts: { onClose: () => void }) {
     return el;
   }
 
+  function partnerFighter(): Fighter | null {
+    if (!partnerId || partnerId === fighter?.id) return null;
+    return fighters.find((item) => item.id === partnerId) ?? null;
+  }
+
+  function forgetPartner(): void {
+    if (!partnerId) return;
+    partnerId = null;
+    if (fighter) paintIdentity(fighter);
+  }
+
+  function takeSession(session: Session): void {
+    sessionId = session.id;
+    messages = session.messages;
+    const next = session.partner ?? null;
+    if (next === partnerId) return;
+    partnerId = next;
+    if (fighter) paintIdentity(fighter);
+  }
+
   function paintIdentity(person: Fighter): void {
+    const partner = partnerFighter();
+    root.classList[partner ? "add" : "remove"]("is-duo");
+    if (partner) {
+      person = {
+        ...person,
+        name: `${person.name} & ${partner.name}`,
+        nameJa: `${person.nameJa}・${partner.nameJa}`,
+      };
+    }
     root.style.setProperty("--aura", person.color);
     setFighterIdentity(person, "chat", {
       name: nameEl,
@@ -193,6 +228,50 @@ export function createChat(opts: { onClose: () => void }) {
     confirmCopy.textContent = `Delete this session with ${person.name}?`;
   }
 
+  function nameKeys(person: Fighter): string[] {
+    const keys = [person.name.toLowerCase()];
+    if (person.id) keys.push(person.id.replace(/_/g, " ").toLowerCase());
+    return keys;
+  }
+
+  function mentions(text: string, person: Fighter): boolean {
+    return nameKeys(person).some((key) => {
+      const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return new RegExp(`\\b${escaped}\\b`, "i").test(text);
+    });
+  }
+
+  function addressed(text: string, primary: Fighter, partner: Fighter): Fighter | null {
+    const match = text.match(/^(?:hey\s+|okay\s+|ok\s+)?(.+?)\s*[,:]/i);
+    if (!match) return null;
+    const head = match[1].trim().toLowerCase();
+    const hits = [primary, partner].filter((person) => nameKeys(person).includes(head));
+    return hits.length === 1 ? hits[0] : null;
+  }
+
+  function aboutToSpeak(): Fighter | null {
+    if (!fighter) return null;
+    if (phase === "sending" && pendingNext === null) return null;
+    if (phase === "sending" && pendingNext) {
+      return fighters.find((item) => item.id === pendingNext) ?? fighter;
+    }
+    const partner = partnerFighter();
+    if (phase !== "sending" || !partner) return fighter;
+    const latest = [...messages].reverse().find((msg) => msg.role === "user");
+    const text = latest?.content.trim() ?? "";
+    if (!text || /\bbetween you two\b/i.test(text)) return fighter;
+    const called = addressed(text, fighter, partner);
+    if (called) return called;
+    const named = [fighter, partner].filter((person) => mentions(text, person));
+    return named.length === 1 ? named[0] : fighter;
+  }
+
+  function fighterFor(msg: ChatMessage): Fighter | null {
+    if (!fighter) return null;
+    if (msg.role !== "assistant" || !msg.speaker || msg.speaker === "user") return fighter;
+    return fighters.find((item) => item.id === msg.speaker) ?? fighter;
+  }
+
   function ki(): HTMLElement {
     const span = document.createElement("span");
     span.className = "ki";
@@ -201,7 +280,9 @@ export function createChat(opts: { onClose: () => void }) {
   }
 
   function sameMessage(a: ChatMessage, b: ChatMessage): boolean {
-    return a.role === b.role && a.content === b.content;
+    if (a.role !== b.role || a.content !== b.content) return false;
+    if (!a.speaker || !b.speaker) return true;
+    return a.speaker === b.speaker;
   }
 
   function samePrefix(prev: ChatMessage[], next: ChatMessage[]): boolean {
@@ -215,7 +296,10 @@ export function createChat(opts: { onClose: () => void }) {
   function bubble(person: Fighter, role: ChatMessage["role"], body: HTMLElement): HTMLElement {
     const row = document.createElement("article");
     row.className = role === "user" ? "msg msg-user" : "msg msg-assistant";
-    if (role === "assistant") row.append(icon(person));
+    if (role === "assistant") {
+      row.style.setProperty("--aura", person.color);
+      row.append(icon(person));
+    }
     const shell = document.createElement("div");
     shell.className = "bubble";
     const who = document.createElement("p");
@@ -227,10 +311,11 @@ export function createChat(opts: { onClose: () => void }) {
   }
 
   function appendMessage(msg: ChatMessage): void {
-    if (!fighter) return;
+    const person = fighterFor(msg);
+    if (!person) return;
     const body = document.createElement("p");
     body.textContent = msg.content;
-    log.append(bubble(fighter, msg.role, body));
+    log.append(bubble(person, msg.role, body));
   }
 
   function fillPending(body: HTMLElement, person: Fighter, kind: "loading" | "wait"): void {
@@ -249,22 +334,44 @@ export function createChat(opts: { onClose: () => void }) {
   }
 
   function appendPending(): void {
-    if (!fighter) return;
+    const person = aboutToSpeak();
+    if (!person) return;
     const kind = phase === "loading" ? "loading" : "wait";
     const body = document.createElement("p");
-    fillPending(body, fighter, kind);
-    const row = bubble(fighter, "assistant", body);
+    fillPending(body, person, kind);
+    const row = bubble(person, "assistant", body);
     row.classList.add("msg-pending");
     pendingRow = row;
     pendingBody = body;
     pendingKind = kind;
+    pendingLabel = person.name;
     log.append(row);
+  }
+
+  function findClass(node: HTMLElement, token: string): HTMLElement | null {
+    if (node.classList.contains(token)) return node;
+    for (const child of node.children) {
+      const found = findClass(child as HTMLElement, token);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function renamePending(person: Fighter): void {
+    if (!pendingRow || pendingLabel === person.name) return;
+    pendingRow.style.setProperty("--aura", person.color);
+    const who = findClass(pendingRow, "bubble-name");
+    if (who) who.textContent = person.name;
+    const old = findClass(pendingRow, "msg-icon");
+    if (old && typeof old.replaceWith === "function") old.replaceWith(icon(person));
+    pendingLabel = person.name;
   }
 
   function resetPending(): void {
     pendingRow = null;
     pendingBody = null;
     pendingKind = null;
+    pendingLabel = "";
   }
 
   function rebuildLog(): void {
@@ -307,7 +414,8 @@ export function createChat(opts: { onClose: () => void }) {
   }
 
   function syncPending(busy: boolean): void {
-    if (!busy || !fighter) {
+    const person = aboutToSpeak();
+    if (!busy || !person) {
       pendingRow?.remove();
       resetPending();
       return;
@@ -317,8 +425,10 @@ export function createChat(opts: { onClose: () => void }) {
       appendPending();
       return;
     }
-    if (pendingKind !== kind) {
-      fillPending(pendingBody, fighter, kind);
+    const labelChanged = pendingLabel !== person.name;
+    renamePending(person);
+    if (labelChanged || pendingKind !== kind) {
+      fillPending(pendingBody, person, kind);
       pendingKind = kind;
     }
   }
@@ -359,16 +469,14 @@ export function createChat(opts: { onClose: () => void }) {
         ? await getSession(id, nextSignal())
         : await openSession(person.id, fresh, nextSignal());
       if (current !== token) return;
-      sessionId = session.id;
-      messages = session.messages;
+      takeSession(session);
       error = "";
       if (messages.length === 0) {
         phase = "greeting";
         render();
         const greeted = await greet(session.id, nextSignal());
         if (current !== token) return;
-        sessionId = greeted.id;
-        messages = greeted.messages;
+        takeSession(greeted);
       }
       phase = "ready";
       refreshHistory(person, current);
@@ -389,15 +497,32 @@ export function createChat(opts: { onClose: () => void }) {
     const current = token;
     const draft = input.value;
     input.value = "";
-    messages = [...messages, { role: "user", content: text }];
+    messages = [...messages, { role: "user", content: text, speaker: "user" }];
+    pendingNext = undefined;
     phase = "sending";
     error = "";
     render();
-    void sendMessage(sessionId, text, nextSignal())
+    let streamed = 0;
+    const onEvent = (event: SendEvent) => {
+      if (current !== token) return;
+      if (event.partner && event.partner !== partnerId) {
+        partnerId = event.partner;
+        if (fighter) paintIdentity(fighter);
+      }
+      if (event.type === "start" || event.type === "line") {
+        if (event.next !== undefined) pendingNext = event.next;
+      }
+      if (event.type === "line" && event.message) {
+        streamed += 1;
+        messages = [...messages, event.message];
+      }
+      if (event.type === "start" || event.type === "line") render();
+    };
+    void sendMessage(sessionId, text, nextSignal(), onEvent)
       .then((session) => {
         if (current !== token) return;
-        sessionId = session.id;
-        messages = session.messages;
+        if (session) takeSession(session);
+        pendingNext = undefined;
         phase = "ready";
         render();
         input.focus();
@@ -405,8 +530,11 @@ export function createChat(opts: { onClose: () => void }) {
       })
       .catch((err: unknown) => {
         if (current !== token || isAbort(err)) return;
-        messages = messages.slice(0, -1);
-        input.value = draft;
+        if (streamed === 0) {
+          messages = messages.slice(0, -1);
+          input.value = draft;
+        }
+        pendingNext = undefined;
         phase = "ready";
         error = err instanceof Error ? err.message : "The local model didn't answer. Try sending again.";
         render();
@@ -421,6 +549,7 @@ export function createChat(opts: { onClose: () => void }) {
     messages = [];
     error = "";
     phase = "loading";
+    forgetPartner();
     const current = ++token;
     render();
     void load(fighter, true, current);
@@ -452,6 +581,7 @@ export function createChat(opts: { onClose: () => void }) {
         messages = [];
         error = "";
         phase = "loading";
+        forgetPartner();
         const next = ++token;
         render();
         void load(fighter, false, next);
@@ -532,17 +662,19 @@ export function createChat(opts: { onClose: () => void }) {
     isOpen: () => root.classList.contains("is-open"),
     start(person: Fighter) {
       fighter = person;
+      partnerId = null;
       error = "";
       confirm = false;
       paintIdentity(person);
       hideReelCharacter();
-      if (frozenChat) {
-        sessionId = sampleSession.id;
-        messages = sampleMessages.map((message) => ({ ...message }));
+      if (frozenChat && person.id) {
+        const sample = sampleFor(person.id);
+        sessionId = sample.session.id;
+        messages = sample.messages;
         phase = "ready";
         const title = document.querySelector<HTMLElement>("#chat-history-title");
         if (title) title.textContent = "Sample transcript";
-        paintHistory([sampleSession]);
+        paintHistory([sample.session]);
         render();
         return;
       }

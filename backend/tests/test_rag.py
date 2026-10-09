@@ -172,7 +172,7 @@ def test_with_canon_inserts_context_without_mutating_input(tmp_path):
     assert prepared[0]["content"] == "You are Frieza."
     assert prepared[1]["role"] == "system"
     assert prepared[1]["content"].startswith("Canon passages:")
-    assert "Answer lore questions only from these passages." in prepared[1]["content"]
+    assert "Reply in the voice you were given, in a few short sentences." in prepared[1]["content"]
     assert "[vegeta_saga.txt]" in prepared[1]["content"]
     assert "Nappa" in prepared[1]["content"]
     assert prepared[-1]["role"] == "user"

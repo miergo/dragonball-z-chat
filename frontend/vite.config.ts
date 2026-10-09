@@ -12,6 +12,15 @@ export default defineConfig({
       "/api": {
         target: "http://127.0.0.1:8787",
         rewrite: (path) => path.replace(/^\/api/, ""),
+        configure: (proxy) => {
+          proxy.on("proxyRes", (proxyRes) => {
+            const type = proxyRes.headers["content-type"];
+            if (typeof type === "string" && type.includes("text/event-stream")) {
+              proxyRes.headers["cache-control"] = "no-cache";
+              proxyRes.headers["x-accel-buffering"] = "no";
+            }
+          });
+        },
       },
     },
   },

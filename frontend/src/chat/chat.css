@@ -103,6 +103,12 @@
   font-weight: 400;
   letter-spacing: 0.04em;
   line-height: 0.85;
+  overflow-wrap: anywhere;
+}
+
+.chat.is-duo .chat-identity h2 {
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 0.95;
 }
 
 .chat-kana {

@@ -331,8 +331,10 @@ def _latest_user(messages) -> str:
 def format_passages(passages: list[Passage]) -> str:
     blocks = [f"[{passage.source}]\n{passage.text.strip()}" for passage in passages]
     instruction = (
-        "Answer lore questions only from these passages. "
-        "If they do not contain the answer, say so. "
+        "Use these passages only for names and events. "
+        "Reply in the voice you were given, in a few short sentences. "
+        'Do not write a summary, name a saga, or say "the Z Fighters." '
+        "If the passages do not contain the answer, say you do not know, still in that voice. "
         "Do not merge different characters or forms."
     )
     return "Canon passages:\n" + instruction + "\n\n" + "\n\n".join(blocks)

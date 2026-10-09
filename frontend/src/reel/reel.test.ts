@@ -424,7 +424,7 @@ check(
   "pointer move rewrote the fighter name, kana, or line",
 );
 fire(reel, "pointerup", { button: 0, clientX: -180, pointerId: 3, target: card });
-check(plateName.textContent === "Coming soon", "releasing a drag updates the plate for the card in front");
+check(plateName.textContent === "Piccolo", "releasing a drag updates the plate for the card in front");
 
 if (failures.length) throw new Error(failures.join("\n"));
 

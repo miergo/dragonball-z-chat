@@ -313,7 +313,7 @@ check(state.drag !== 0, "a pointer move writes the shared drag field");
 fire(reel, "pointerup", { button: 0, clientX: -180, pointerId: 3, target: card });
 check(state.drag === 0, "releasing a drag clears the shared drag field");
 check(state.index === 1, "releasing a drag writes the shared index");
-check(plateName.textContent === "Coming soon", "card paint reads the shared index");
+check(plateName.textContent === "Piccolo", "card paint reads the shared index");
 
 fire(reel, "click", { detail: 0, target: reel.querySelectorAll(".card")[1] });
 check(state.summonOpen, "opening summon sets the shared summonOpen flag");

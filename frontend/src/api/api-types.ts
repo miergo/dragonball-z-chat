@@ -104,14 +104,16 @@ export interface components {
             role: "user" | "assistant";
             /** Content */
             content: string;
+            /** Speaker */
+            speaker: "user" | ("frieza" | "piccolo" | "majin_buu");
         };
         /** CreateSessionIn */
         CreateSessionIn: {
             /**
              * Character
-             * @constant
+             * @enum {string}
              */
-            character: "frieza";
+            character: "frieza" | "piccolo" | "majin_buu";
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -129,9 +131,11 @@ export interface components {
             id: string;
             /**
              * Character
-             * @constant
+             * @enum {string}
              */
-            character: "frieza";
+            character: "frieza" | "piccolo" | "majin_buu";
+            /** Partner */
+            partner: ("frieza" | "piccolo" | "majin_buu") | null;
             /** Messages */
             messages: components["schemas"]["ChatMessage"][];
         };
@@ -187,7 +191,7 @@ export interface operations {
     get_sessions_sessions_get: {
         parameters: {
             query: {
-                character: "frieza";
+                character: "frieza" | "piccolo" | "majin_buu";
             };
             header?: never;
             path?: never;

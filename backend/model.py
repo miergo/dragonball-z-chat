@@ -36,7 +36,8 @@ if not TABBY_API_KEY:
 MODEL = TABBY_MODEL if BACKEND == "tabby" else OLLAMA_MODEL
 CharacterName = Literal[
     "frieza",
-
+    "piccolo",
+    "majin_buu",
 ]
 CHARACTERS = get_args(CharacterName)
 PROMPTS = Path(__file__).parent / "prompts"
@@ -61,6 +62,38 @@ def complete(messages):
         reply = chat_ollama(OLLAMA_MODEL, messages, stream=False)
         return reply.message.content
     raise ValueError(f"Unknown LLM_BACKEND {BACKEND!r} (use 'tabby' or 'ollama')")
+
+
+SUMMARIZER_MODEL = "qwen2.5:0.5b"
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434/api/chat")
+
+
+def summarize(messages):
+    """CPU summary from the local 0.5B. Does not use the 7B in complete()."""
+    body = json.dumps(
+        {
+            "model": SUMMARIZER_MODEL,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "num_gpu": 0,
+                "num_ctx": 2048,
+                "temperature": 0.1,
+            },
+        }
+    ).encode()
+    req = urllib.request.Request(
+        OLLAMA_URL,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        payload = json.load(resp)
+    content = payload["message"]["content"]
+    if not isinstance(content, str):
+        raise RuntimeError("empty summary")
+    return content
 
 
 def _complete_tabby(messages):

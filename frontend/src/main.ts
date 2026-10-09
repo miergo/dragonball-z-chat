@@ -53,6 +53,15 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && document.activeElement === document.body) summon.open(state.index);
 });
 
+const issueDate = document.querySelector<HTMLElement>("#issue-date");
+if (issueDate) {
+  issueDate.textContent = new Date().toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 reel.start();
 reel.paint(false);
 createSplash({ onLeave: () => reel.paint(true) });

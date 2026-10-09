@@ -34,10 +34,16 @@ type TestEl = {
   scrollHeight: number;
 };
 
+type LiveStream = {
+  push(chunk: string): void;
+  close(): void;
+};
+
 type Call = {
   url: string;
   resolve(body: unknown, status?: number): void;
   reject(err: unknown): void;
+  stream(): LiveStream;
 };
 
 const goku: Fighter = {
@@ -186,11 +192,11 @@ function installFetch(): void {
   calls.length = 0;
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    return await new Promise<Response>((resolve, reject) => {
+    return await new Promise<Response>((resolveResponse, reject) => {
       calls.push({
         url,
         resolve(body, status = 200) {
-          resolve(
+          resolveResponse(
             new Response(JSON.stringify(body), {
               status,
               headers: { "Content-Type": "application/json" },
@@ -198,9 +204,36 @@ function installFetch(): void {
           );
         },
         reject,
+        stream() {
+          const encoder = new TextEncoder();
+          let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+          const body = new ReadableStream<Uint8Array>({
+            start(ctrl) {
+              controller = ctrl;
+            },
+          });
+          resolveResponse(
+            new Response(body, {
+              status: 200,
+              headers: { "Content-Type": "text/event-stream" },
+            }),
+          );
+          return {
+            push(chunk: string) {
+              controller?.enqueue(encoder.encode(chunk));
+            },
+            close() {
+              controller?.close();
+            },
+          };
+        },
       });
     });
   }) as typeof fetch;
+}
+
+function sse(event: unknown): string {
+  return `data: ${JSON.stringify(event)}\n\n`;
 }
 
 function lastCall(): Call {
@@ -240,6 +273,14 @@ function messageRows(): TestEl[] {
 
 function pendingRow(): TestEl | undefined {
   return byId("chat-log").children.find((child) => hasClass(child, "msg") && isPending(child));
+}
+
+function nameText(row: TestEl): string {
+  let name = "";
+  walk(row, (node) => {
+    if (hasClass(node, "bubble-name")) name = node.textContent;
+  });
+  return name;
 }
 
 function bodyText(row: TestEl): string {
@@ -382,6 +423,77 @@ await flush();
 check(!pendingRow(), "the greeting removes the pending row");
 check(messageRows().length === 1 && bodyText(messageRows()[0]).includes("hello"), "the greeting appends its message");
 check(byId("chat-log").replaces === loadingReplaces, "the greeting tail does not rebuild the log");
+
+const streamed = mount();
+streamed.start(goku);
+lastCall().resolve(
+  session("live", [
+    { role: "user", content: "hey" },
+    { role: "assistant", content: "yo" },
+  ]),
+);
+await flush();
+const keptRows = messageRows();
+byId("chat-input").value = "again";
+fire("chat-form", "submit");
+const live = lastCall().stream();
+live.push(
+  sse({
+    type: "line",
+    message: { role: "assistant", content: "One.", speaker: "piccolo" },
+    partner: "piccolo",
+    next: "frieza",
+  }),
+);
+await flush();
+check(messageRows()[0] === keptRows[0] && messageRows()[1] === keptRows[1], "a streamed line keeps the earlier bubbles");
+check(messageRows().length === 4 && bodyText(messageRows()[3]).includes("One."), "a streamed line paints before the turn finishes");
+check(Boolean(pendingRow()) && nameText(pendingRow()!).includes("Frieza"), "the waiting bubble moves to the next fighter");
+live.push(
+  sse({
+    type: "line",
+    message: { role: "assistant", content: "Two.", speaker: "frieza" },
+    partner: "piccolo",
+    next: null,
+  }) + sse({ type: "done", partner: "piccolo" }),
+);
+live.close();
+await flush();
+check(messageRows().length === 5 && bodyText(messageRows()[4]).includes("Two."), "the next streamed line paints when it arrives");
+check(!pendingRow(), "the last streamed line clears the waiting bubble");
+check(byId("chat-input").value === "", "a finished stream leaves the draft empty");
+
+const interrupted = mount();
+interrupted.start(goku);
+lastCall().resolve(
+  session("live", [
+    { role: "user", content: "hey" },
+    { role: "assistant", content: "yo" },
+  ]),
+);
+await flush();
+byId("chat-input").value = "again";
+fire("chat-form", "submit");
+const broken = lastCall().stream();
+broken.push(
+  sse({
+    type: "line",
+    message: { role: "assistant", content: "Kept.", speaker: "piccolo" },
+    partner: "piccolo",
+    next: "frieza",
+  }),
+);
+await flush();
+broken.push(sse({ type: "error", detail: "The local model didn't answer." }));
+broken.close();
+await flush();
+check(bodyText(messageRows()[messageRows().length - 1]).includes("Kept."), "a later failure keeps the lines already painted");
+check(
+  messageRows().some((row) => bodyText(row).includes("again")),
+  "a later failure keeps the user line",
+);
+check(byId("chat-input").value === "", "a later failure does not restore the draft");
+check(byId("chat-error").hidden === false, "a later failure shows the error");
 
 const fresh = mount();
 fresh.start(goku);

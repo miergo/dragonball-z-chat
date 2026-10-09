@@ -31,7 +31,11 @@
             "in": "query",
             "required": true,
             "schema": {
-              "const": "frieza",
+              "enum": [
+                "frieza",
+                "piccolo",
+                "majin_buu"
+              ],
               "type": "string",
               "title": "Character"
             }
@@ -286,12 +290,30 @@
           "content": {
             "type": "string",
             "title": "Content"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "user"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "frieza",
+                  "piccolo",
+                  "majin_buu"
+                ]
+              }
+            ],
+            "title": "Speaker"
           }
         },
         "type": "object",
         "required": [
           "role",
-          "content"
+          "content",
+          "speaker"
         ],
         "title": "ChatMessage"
       },
@@ -299,7 +321,11 @@
         "properties": {
           "character": {
             "type": "string",
-            "const": "frieza",
+            "enum": [
+              "frieza",
+              "piccolo",
+              "majin_buu"
+            ],
             "title": "Character"
           }
         },
@@ -345,8 +371,28 @@
           },
           "character": {
             "type": "string",
-            "const": "frieza",
+            "enum": [
+              "frieza",
+              "piccolo",
+              "majin_buu"
+            ],
             "title": "Character"
+          },
+          "partner": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "frieza",
+                  "piccolo",
+                  "majin_buu"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner"
           },
           "messages": {
             "items": {
@@ -360,6 +406,7 @@
         "required": [
           "id",
           "character",
+          "partner",
           "messages"
         ],
         "title": "SessionOut"
