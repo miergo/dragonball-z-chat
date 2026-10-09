@@ -2,13 +2,13 @@
 
 [Open Dragon Weekly](https://miergo.github.io/dragonball-z-chat/)
 
-Local chat app: talk or type about Dragon Ball Z lore. A local LLM answers in a character’s voice. Summon a second fighter into the same session and they take turns on screen as each reply finishes.
+Local chat app: talk or type about Dragon Ball Z lore. A local LLM answers in a character’s voice (Frieza, Piccolo, or Majin Buu).
+
+You can summon a second fighter into an open session. They greet, then take turns. Each fighter speaks three times per user message (six lines total). Those lines stream to the UI as the model finishes each one.
 
 **Stack:** Python backend (LLM + API). TypeScript frontend.
 
 The Pages link is the reel. Chat and the model run on this machine.
-
-**Characters:** Frieza, Piccolo, Majin Buu. In a solo chat, say something like “summon Piccolo” to add a partner. After that, each of your messages starts a short exchange (three replies each, six lines total). Those lines stream to the UI as they are saved.
 
 ```bash
 # backend (local)
