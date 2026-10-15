@@ -47,8 +47,13 @@ def main():
         )
         all_docs.extend(result["documents"])
         all_metas.extend(result["metadatas"])
-        if result.get("embeddings"):
-            all_embeddings.extend(result["embeddings"])
+        # Chroma may return a numpy array; never use truthiness on it.
+        embeddings = result.get("embeddings")
+        if embeddings is not None:
+            for emb in embeddings:
+                all_embeddings.append(
+                    emb.tolist() if hasattr(emb, "tolist") else list(emb)
+                )
 
     output = {
         "model": EMBED_MODEL,
