@@ -181,15 +181,26 @@ _embeddings = None
 _reranker = None
 
 
+def _torch_device() -> str:
+    """CUDA when a driver is present; CPU on CI / machines without a GPU."""
+    try:
+        import torch
+
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except Exception:
+        return "cpu"
+
+
 def default_embeddings():
     global _embeddings
     if _embeddings is None:
         from langchain_huggingface import HuggingFaceEmbeddings
 
+        device = _torch_device()
         _embeddings = _QueryPrefix(
             HuggingFaceEmbeddings(
                 model_name=EMBED_MODEL,
-                model_kwargs={"device": "cuda"},
+                model_kwargs={"device": device},
             )
         )
     return _embeddings
@@ -200,7 +211,7 @@ def default_reranker():
     if _reranker is None:
         from sentence_transformers import CrossEncoder
 
-        _reranker = CrossEncoder(RERANK_MODEL, device="cuda")
+        _reranker = CrossEncoder(RERANK_MODEL, device=_torch_device())
     return _reranker
 
 
