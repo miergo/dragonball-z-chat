@@ -1,11 +1,12 @@
 import { defineConfig } from "vite";
+import { resolve } from "path";
 
 // GitHub Pages serves this repo at /dragonball-z-chat/. Local dev stays at /.
 const pagesBase = process.env.PAGES_BASE;
 
 export default defineConfig({
   root: ".",
-  publicDir: "media",
+  publicDir: "public",
   base: pagesBase && pagesBase.length > 0 ? pagesBase : "/",
   server: {
     proxy: {
@@ -22,6 +23,36 @@ export default defineConfig({
           });
         },
       },
+    },
+  },
+  build: {
+    target: "esnext",
+    modulePreload: {
+      polyfill: false,
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-transformers": ["@xenova/transformers"],
+          "vendor-webllm": ["@mlc-ai/web-llm"],
+          "vendor-sqljs": ["sql.js"],
+        },
+      },
+    },
+  },
+  optimizeDeps: {
+    exclude: ["@xenova/transformers", "@mlc-ai/web-llm", "sql.js"],
+    web: {
+      async: true,
+    },
+  },
+  worker: {
+    format: "es",
+    plugins: () => [],
+  },
+  resolve: {
+    alias: {
+      "@": resolve(__dirname, "./src"),
     },
   },
 });

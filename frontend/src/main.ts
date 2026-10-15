@@ -2,7 +2,7 @@ import "./style.css";
 import "./reel/reel.css";
 import "./summon/summon.css";
 import "./chat/chat.css";
-import { createChat } from "./chat/chat";
+import { createChat } from "./chat/chat-client";
 import { createReel, type ReelState } from "./reel/reel";
 import { createSplash } from "./splash/splash";
 import { createSummon } from "./summon/summon";
@@ -62,6 +62,26 @@ if (issueDate) {
   });
 }
 
-reel.start();
-reel.paint(false);
-createSplash({ onLeave: () => reel.paint(true) });
+function registerServiceWorker(): void {
+  if (!("serviceWorker" in navigator)) return;
+  const swUrl = `${import.meta.env.BASE_URL}sw.js`;
+  void navigator.serviceWorker.register(swUrl).catch((err) => {
+    console.error("Service worker registration failed:", err);
+  });
+}
+
+async function initApp() {
+  registerServiceWorker();
+
+  if ("gpu" in navigator) {
+    console.log("WebGPU available, client-side LLM can initialize");
+  } else {
+    console.log("WebGPU not available, using frozen/fallback mode when needed");
+  }
+
+  reel.start();
+  reel.paint(false);
+  createSplash({ onLeave: () => reel.paint(true) });
+}
+
+void initApp();
