@@ -6,31 +6,28 @@
 
 ## Done earlier
 
-- [x] Sessions not initialized (call `initSessions`, local create/load, skip API greet)
-- [x] SW stale HTML / BASE_URL assets / real `sql-wasm.wasm`
-- [x] Send path ends with `user` role (MessageOrderError)
-- [x] Docs: `ARCHITECTURE.md`, `PLAN-webllm-capability.md`
-- [x] Capability gate + small WebLLM (0.5B, lazy load, history cap)
-- [x] Wire client RAG into send ([PLAN-rag-wireup.md](./PLAN-rag-wireup.md))
+- [x] Sessions / SW / message order / capability gate / client RAG wire-up / RAG quality (top-K, score, fact extract)
+- Plan docs: [PLAN-rag-wireup.md](./PLAN-rag-wireup.md), [PLAN-rag-quality.md](./PLAN-rag-quality.md)
 
 ---
 
-## Current: RAG quality (top-2, score gate, fact extract)
+## Current: Hybrid RAG (validate + one refine)
 
-**Plan doc:** [PLAN-rag-quality.md](./PLAN-rag-quality.md)  
-**Scope:** tighter retrieve + same-engine fact extract before character reply; lower temp when lore/fact is used.  
-**Out of scope:** second browser model, frozen fallback, IndexedDB, Workers, changing `MODEL_ID`.
+**Plan doc:** [PLAN-hybrid-rag.md](./PLAN-hybrid-rag.md)  
+**Ref:** [LangChain Hybrid RAG](https://docs.langchain.com/oss/python/deepagents/retrieval)  
+**Scope:** query enhance (≤1), retrieval validate, fact extract; UNKNOWN → don’t-know (no passage dump). Same WebLLM 1.5B.  
+**Out of scope:** Agentic tool loops, answer-regen loops, second model, Python API chat, frozen fallback, IndexedDB.
 
 ### Checklist (write these before coding)
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 1 | Write plan doc | `PLAN-rag-quality.md` | [x] |
-| 2 | `TOP_K=2`, `MIN_SCORE`, skip thin passages; log skip reason | `frontend/src/runtime/client-rag.ts` | [x] |
-| 3 | Skip thin section bodies when building index | `backend/rag.py` | [x] |
-| 4 | `extractFact` + `chat` temperature option | `frontend/src/runtime/client-llm.ts` | [x] |
-| 5 | Send path: retrieve → extract → inject fact (fallback passages); status + console | `frontend/src/chat/chat-client.ts` | [x] |
-| 6 | Note two-pass lore path in architecture | `ARCHITECTURE.md` | [x] |
+| 1 | Write plan doc | `PLAN-hybrid-rag.md` | [x] |
+| 2 | Tighter `FACT_SYSTEM` + `enhanceQuery` | `frontend/src/runtime/client-llm.ts` | [x] |
+| 3 | `formatUnknown()` (no passage dump on UNKNOWN) | `frontend/src/runtime/client-rag.ts` | [x] |
+| 4 | Hybrid `loreForQuestion`: retrieve → validate → enhance/retry ≤1 → fact or don’t-know | `frontend/src/chat/chat-client.ts` | [x] |
+| 5 | Console `RAG hybrid:` branches + summarize logs | `chat-client.ts` / `client-llm.ts` | [x] |
+| 6 | Architecture note for hybrid path | `ARCHITECTURE.md` | [x] |
 | 7 | `npm run build` / `tsc` | frontend | [x] |
 | 8 | `/code-review` on the change | — | [x] (in-place) |
 | 9 | Commit + push Pages | — | [ ] (ask first) |
@@ -39,15 +36,15 @@
 
 | Severity | Finding | Follow-up |
 |----------|---------|-----------|
-| Note | `MIN_SCORE=0.4` may need tuning from console `RAG retrieve: skipped` / hit scores | Adjust if real lore is skipped |
-| Note | Fact extract adds one WebLLM call latency on lore hits | Expected; status shows “Checking lore…” |
-| Note | Thin-body filter in `rag.py` applies on next CI index rebuild | Client also filters thin docs from old JSON |
+| Note | Enhance + extract add latency on hard lore | Capped ≤1 enhance, ≤2 extract |
+| Note | `formatPassages` unused on send path now | Kept export; hybrid never dumps passages after UNKNOWN |
+| Note | Index gaps still yield don’t-know | Correct; expand canon if needed |
 
 ### Done when
 
-- [x] At most 2 hits above score floor (or none for weak queries)
-- [x] Fact extract runs on lore hits; character gets fact (or soft fallback)
-- [x] Chitchat temp stays ~0.7; lore/fact path uses lower temp
+- [x] UNKNOWN never injects `formatPassages`
+- [x] At most one enhance + one re-retrieve per send
+- [x] Successful extract still injects `formatFact` @ lore temp
 - [x] Build passes
 
 ---

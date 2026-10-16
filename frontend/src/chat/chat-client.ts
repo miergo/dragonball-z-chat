@@ -10,15 +10,17 @@ import {
   ensureLLM,
   chat,
   extractFact,
+  enhanceQuery,
   isLLMReady,
   LORE_TEMPERATURE,
 } from "../runtime/client-llm";
 import {
   ensureRAG,
   retrieve,
-  formatPassages,
   formatFact,
+  formatUnknown,
   isRAGReady,
+  type Passage,
 } from "../runtime/client-rag";
 import { assessDevice, type DeviceAssessment } from "../runtime/device-capability";
 import {
@@ -588,9 +590,21 @@ export function createChat(opts: { onClose: () => void }) {
     }
   }
 
+  function logHits(label: string, passages: Passage[]): void {
+    console.log(
+      label,
+      passages.map((p) => ({
+        score: Number(p.score.toFixed(4)),
+        source: p.source,
+        title: p.title,
+        preview: p.text.trim().slice(0, 160),
+      })),
+    );
+  }
+
   /**
-   * Retrieve → same-engine fact extract → character lore block.
-   * Soft-fails to passages or null; never throws.
+   * Hybrid RAG: retrieve → validate (extract) → optional one enhance/retry → fact or don’t-know.
+   * Never dumps raw passages after UNKNOWN. Soft-fails; never throws.
    */
   async function loreForQuestion(
     text: string,
@@ -606,41 +620,81 @@ export function createChat(opts: { onClose: () => void }) {
         error = "Looking up lore…";
         render();
       }
-      console.log("RAG lookup:", text);
-      const passages = await retrieve(text);
+
+      let enhancedUsed = false;
+      let searchQuery = text;
+      console.log("RAG hybrid: lookup", searchQuery);
+      let passages = await retrieve(searchQuery);
+      logHits(passages.length ? "RAG hits:" : "RAG hits: (none)", passages);
+
       if (!passages.length) {
-        console.log("RAG hits: (none)");
+        if (current === token) {
+          error = "Checking lore…";
+          render();
+        }
+        const enhanced = await enhanceQuery(text);
+        if (current !== token) return null;
+        if (enhanced) {
+          enhancedUsed = true;
+          searchQuery = enhanced;
+          console.log("RAG hybrid: re-retrieve with enhanced query");
+          if (current === token) {
+            error = "Looking up lore…";
+            render();
+          }
+          passages = await retrieve(searchQuery);
+          logHits(passages.length ? "RAG hits (enhanced):" : "RAG hits (enhanced): (none)", passages);
+        }
+      }
+
+      if (!passages.length) {
+        console.log("RAG hybrid: no hits after validate — plain character chat");
         return null;
       }
-      console.log(
-        "RAG hits:",
-        passages.map((p) => ({
-          score: Number(p.score.toFixed(4)),
-          source: p.source,
-          title: p.title,
-          preview: p.text.trim().slice(0, 160),
-        })),
-      );
 
       if (current === token) {
         error = "Checking lore…";
         render();
       }
       console.log("RAG summarize agent: extracting fact from hits…");
-      const fact = await extractFact(text, passages);
+      let fact = await extractFact(text, passages);
       if (current !== token) return null;
-      console.log(
-        fact
-          ? "RAG summarize agent: fact →"
-          : "RAG summarize agent: UNKNOWN / empty — using passages fallback",
-        fact ?? "",
-      );
 
-      const lore = fact ? formatFact(fact) : formatPassages(passages);
-      console.log(
-        fact ? "RAG prompt for character model (fact):\n" : "RAG prompt for character model (passages fallback):\n",
-        lore,
-      );
+      if (!fact && !enhancedUsed) {
+        console.log("RAG hybrid: UNKNOWN — trying one enhance + re-retrieve");
+        const enhanced = await enhanceQuery(text);
+        if (current !== token) return null;
+        if (enhanced) {
+          enhancedUsed = true;
+          if (current === token) {
+            error = "Looking up lore…";
+            render();
+          }
+          const retry = await retrieve(enhanced);
+          logHits(retry.length ? "RAG hits (retry):" : "RAG hits (retry): (none)", retry);
+          if (retry.length) {
+            passages = retry;
+            if (current === token) {
+              error = "Checking lore…";
+              render();
+            }
+            console.log("RAG summarize agent: extracting fact from retry hits…");
+            fact = await extractFact(text, passages);
+            if (current !== token) return null;
+          }
+        }
+      }
+
+      if (fact) {
+        console.log("RAG summarize agent: fact →", fact);
+        const lore = formatFact(fact);
+        console.log("RAG prompt for character model (fact):\n", lore);
+        return { lore, temperature: LORE_TEMPERATURE };
+      }
+
+      console.log("RAG hybrid: UNKNOWN — don’t-know path (no passage dump)");
+      const lore = formatUnknown();
+      console.log("RAG prompt for character model (unknown):\n", lore);
       return { lore, temperature: LORE_TEMPERATURE };
     } catch (err) {
       console.warn("RAG retrieve failed; continuing without lore:", err);

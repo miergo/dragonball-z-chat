@@ -174,6 +174,15 @@ export function formatFact(fact: string): string {
   );
 }
 
+/** When hybrid validation fails — never dump raw passages. */
+export function formatUnknown(): string {
+  return (
+    "Canon check: the lore index does not contain a clear answer to this question. " +
+    "Say you do not know, in the voice you were given. " +
+    "Do not invent names, killers, or events."
+  );
+}
+
 export function isRAGReady(): boolean {
   return initialized;
 }

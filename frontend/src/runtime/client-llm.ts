@@ -8,11 +8,17 @@ const DEFAULT_TEMPERATURE = 0.7;
 /** Lower creativity when a canon fact/passages are in the prompt. */
 export const LORE_TEMPERATURE = 0.35;
 const FACT_MAX_TOKENS = 96;
+const ENHANCE_MAX_TOKENS = 48;
 
 const FACT_SYSTEM = `You extract answers from Dragon Ball canon passages.
-Reply with  factual sentence only.
-Use only the passages. Do not roleplay or stay in character.
-If the passages do not answer the question, reply with exactly: UNKNOWN`;
+Reply with one short factual sentence that fully answers the question.
+Use only the passages. Do not roleplay.
+Do not quote fight asides, willpower lines, or unrelated details that do not answer the question.
+If the passages do not clearly answer the question, reply with exactly: UNKNOWN`;
+
+const ENHANCE_SYSTEM = `Rewrite the user message as a short Dragon Ball Z lore search query.
+Use character names and concrete events. One line only. No quotes. No explanation.
+If it is only a greeting or chitchat with no lore ask, reply with exactly: SKIP`;
 
 const SYSTEM_PROMPTS: Record<string, string> = {
   frieza: `You are Frieza from Dragon Ball Z. Reply in English only.
@@ -106,7 +112,7 @@ export async function ensureLLM(callbacks?: LLMCallbacks): Promise<void> {
 
 /**
  * Cold fact extract from passages (same WebLLM engine, no character voice).
- * Returns null for UNKNOWN / empty / failure — caller soft-falls back.
+ * Returns null for UNKNOWN / empty / failure — caller uses don’t-know path.
  */
 export async function extractFact(
   question: string,
@@ -137,6 +143,40 @@ export async function extractFact(
     return text;
   } catch (error) {
     console.warn("RAG summarize agent failed:", error);
+    return null;
+  }
+}
+
+/**
+ * One-shot query rewrite for hybrid retrieve. Soft-fails to null.
+ */
+export async function enhanceQuery(question: string): Promise<string | null> {
+  if (!engine || !initialized) throw new Error("LLM not initialized");
+  const trimmed = question.trim();
+  if (!trimmed) return null;
+
+  const messages: ChatCompletionMessageParam[] = [
+    { role: "system", content: ENHANCE_SYSTEM },
+    { role: "user", content: trimmed },
+  ];
+
+  try {
+    console.log("RAG hybrid: enhancing query…");
+    const response = await engine.chat.completions.create({
+      messages,
+      stream: false,
+      temperature: 0.1,
+      max_tokens: ENHANCE_MAX_TOKENS,
+    });
+    const text = (response.choices[0]?.message?.content || "")
+      .trim()
+      .replace(/^["']|["']$/g, "");
+    console.log("RAG hybrid: enhanced query →", text || "(empty)");
+    if (!text || /^SKIP\b/i.test(text)) return null;
+    if (text.toLowerCase() === trimmed.toLowerCase()) return null;
+    return text;
+  } catch (error) {
+    console.warn("RAG hybrid: enhanceQuery failed:", error);
     return null;
   }
 }

@@ -87,20 +87,23 @@ dragonball-z-chat/
 user text
   → saveLocalMessage (sql.js)
   → ensureLLM (lazy) + ensureRAG (lazy, soft-fail)
-  → retrieve(user text) → top 3 hits above MIN_SCORE (skip thin stubs)
-       ├─ no hits → character chat @ temp 0.7
-       └─ hits → extractFact (same WebLLM, cold) → formatFact
-            └─ UNKNOWN/fail → formatPassages fallback
+  → Hybrid RAG (capped; same 1.5B WebLLM helpers):
+       retrieve (top 3, MIN_SCORE, thin filter)
+       ├─ no hits → enhanceQuery (≤1) → re-retrieve
+       └─ hits → extractFact
+            ├─ UNKNOWN + enhance not used → enhance → re-retrieve → extract (≤1)
+            ├─ fact → formatFact @ lore temp
+            └─ still UNKNOWN → formatUnknown (no passage dump) @ lore temp
   → optional memory from loadMemory()
   → conversation history ending in user message
-  → inject fact/lore into last user prompt for the model only
+  → inject fact / don’t-know into last user prompt for the model only
   → client-llm.chat(character, messages, { temperature: lore ? 0.35 : 0.7 })
        prepends character SYSTEM_PROMPTS[id]
        streams tokens via WebLLM
   → save assistant message (plain text; lore not persisted)
 ```
 
-See [PLAN-rag-wireup.md](./PLAN-rag-wireup.md) and [PLAN-rag-quality.md](./PLAN-rag-quality.md).
+See [PLAN-hybrid-rag.md](./PLAN-hybrid-rag.md) ([LangChain Hybrid RAG](https://docs.langchain.com/oss/python/deepagents/retrieval)), plus [PLAN-rag-wireup.md](./PLAN-rag-wireup.md) / [PLAN-rag-quality.md](./PLAN-rag-quality.md).
 
 ### Model
 
