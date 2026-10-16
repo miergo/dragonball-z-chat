@@ -10,7 +10,7 @@ export const LORE_TEMPERATURE = 0.35;
 const FACT_MAX_TOKENS = 96;
 
 const FACT_SYSTEM = `You extract answers from Dragon Ball canon passages.
-Reply with one short factual sentence only.
+Reply with  factual sentence only.
 Use only the passages. Do not roleplay or stay in character.
 If the passages do not answer the question, reply with exactly: UNKNOWN`;
 
