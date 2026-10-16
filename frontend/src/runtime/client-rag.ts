@@ -1,4 +1,7 @@
-import { AutoTokenizer, BertModel } from "@xenova/transformers";
+import { AutoTokenizer, BertModel, env } from "@xenova/transformers";
+
+// Pages does not host ONNX weights under /models — skip local probes (404 noise).
+env.allowLocalModels = false;
 
 const QUERY_PREFIX = "Represent this sentence for searching relevant passages: ";
 const CANDIDATES = 40;
