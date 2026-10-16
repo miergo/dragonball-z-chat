@@ -31,7 +31,7 @@
 | 5 | Note RAG on send path in architecture doc | `ARCHITECTURE.md` | [x] |
 | 6 | `npm run build` / `tsc` | frontend | [x] |
 | 7 | `/code-review` on the change | — | [x] (in-place) |
-| 8 | Commit + push Pages | — | [ ] (when asked) |
+| 8 | Commit + push Pages | — | [x] `0f5b70f` |
 
 ### Review notes (post-impl)
 
