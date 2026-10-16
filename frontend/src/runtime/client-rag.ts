@@ -6,7 +6,7 @@ env.allowLocalModels = false;
 const QUERY_PREFIX = "Represent this sentence for searching relevant passages: ";
 const CANDIDATES = 40;
 /** Keep the character prompt short — 1.5B ignores long multi-hit dumps. */
-const TOP_K = 2;
+const TOP_K = 3;
 /** Cosine floor; weak queries like "hi" fall below and return no lore. */
 const MIN_SCORE = 0.4;
 /** Drop heading-only / stub bodies (e.g. "Appearance\\n\\nPersonality"). */

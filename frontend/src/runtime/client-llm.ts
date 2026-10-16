@@ -132,11 +132,11 @@ export async function extractFact(
       max_tokens: FACT_MAX_TOKENS,
     });
     const text = (response.choices[0]?.message?.content || "").trim();
-    console.log("RAG fact extract:", text || "(empty)");
+    console.log("RAG summarize agent raw reply:", text || "(empty)");
     if (!text || /^UNKNOWN\b/i.test(text)) return null;
     return text;
   } catch (error) {
-    console.warn("RAG fact extract failed:", error);
+    console.warn("RAG summarize agent failed:", error);
     return null;
   }
 }

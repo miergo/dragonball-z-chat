@@ -626,8 +626,15 @@ export function createChat(opts: { onClose: () => void }) {
         error = "Checking lore…";
         render();
       }
+      console.log("RAG summarize agent: extracting fact from hits…");
       const fact = await extractFact(text, passages);
       if (current !== token) return null;
+      console.log(
+        fact
+          ? "RAG summarize agent: fact →"
+          : "RAG summarize agent: UNKNOWN / empty — using passages fallback",
+        fact ?? "",
+      );
 
       const lore = fact ? formatFact(fact) : formatPassages(passages);
       console.log(

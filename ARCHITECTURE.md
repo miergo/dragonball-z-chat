@@ -87,7 +87,7 @@ dragonball-z-chat/
 user text
   → saveLocalMessage (sql.js)
   → ensureLLM (lazy) + ensureRAG (lazy, soft-fail)
-  → retrieve(user text) → top 2 hits above MIN_SCORE (skip thin stubs)
+  → retrieve(user text) → top 3 hits above MIN_SCORE (skip thin stubs)
        ├─ no hits → character chat @ temp 0.7
        └─ hits → extractFact (same WebLLM, cold) → formatFact
             └─ UNKNOWN/fail → formatPassages fallback
