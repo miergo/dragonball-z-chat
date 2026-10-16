@@ -1,9 +1,9 @@
 import { CreateMLCEngine, ChatCompletionMessageParam } from "@mlc-ai/web-llm";
 
-/** Small low-resource model (~0.9 GB VRAM est.) — see PLAN-webllm-capability.md */
-export const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+/** ~2.5 GB VRAM est. — solid on RTX 3070; keep q4f16 for visitors. See WebLLM prebuiltAppConfig. */
+export const MODEL_ID = "Qwen2.5-3B-Instruct-q4f16_1-MLC";
 
-const MAX_TOKENS = 256;
+const MAX_TOKENS = 384;
 
 const SYSTEM_PROMPTS: Record<string, string> = {
   frieza: `You are Frieza from Dragon Ball Z. Reply in English only.

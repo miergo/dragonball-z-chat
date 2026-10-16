@@ -101,7 +101,7 @@ See [PLAN-rag-wireup.md](./PLAN-rag-wireup.md).
 
 ### Model
 
-- **ID:** `Qwen2.5-0.5B-Instruct-q4f16_1-MLC` (~0.9 GB VRAM est.)
+- **ID:** `Qwen2.5-3B-Instruct-q4f16_1-MLC` (~2.5 GB VRAM est.)
 - **Engine:** `@mlc-ai/web-llm` + WebGPU
 - First visit downloads weights into browser cache; later loads are faster
 - Gated by `assessDevice()` (WebGPU adapter + RAM heuristic)
