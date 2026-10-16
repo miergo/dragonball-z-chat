@@ -29,7 +29,8 @@ Opening a character chat on Pages shows **Sessions not initialized**. Console ma
 ## Status
 
 - [x] 1–4 implemented in `chat-client.ts` (call `initializeLocalApp`, await `initSessions`, local get/create, skip API greet)
-- [ ] Redeploy verified on Pages after push
+- [x] Redeploy after session-init push
+- [ ] SW stale HTML: bump cache + network-first for documents (fixing 404s on old `assets/*.js` hashes)
 
 ## Done when
 
