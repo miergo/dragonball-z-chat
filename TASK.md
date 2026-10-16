@@ -11,41 +11,43 @@
 - [x] Send path ends with `user` role (MessageOrderError)
 - [x] Docs: `ARCHITECTURE.md`, `PLAN-webllm-capability.md`
 - [x] Capability gate + small WebLLM (0.5B, lazy load, history cap)
+- [x] Wire client RAG into send ([PLAN-rag-wireup.md](./PLAN-rag-wireup.md))
 
 ---
 
-## Current: Wire client RAG into send
+## Current: RAG quality (top-2, score gate, fact extract)
 
-**Plan doc:** [PLAN-rag-wireup.md](./PLAN-rag-wireup.md)  
-**Scope:** lazy `ensureRAG` → `retrieve` → `formatPassages` → inject into live WebLLM prompt. Soft-fail if index/embedder fails.  
-**Out of scope:** frozen fallback, IndexedDB, Workers, index sharding, Python API changes.
+**Plan doc:** [PLAN-rag-quality.md](./PLAN-rag-quality.md)  
+**Scope:** tighter retrieve + same-engine fact extract before character reply; lower temp when lore/fact is used.  
+**Out of scope:** second browser model, frozen fallback, IndexedDB, Workers, changing `MODEL_ID`.
 
 ### Checklist (write these before coding)
 
 | # | Task | File(s) | Status |
 |---|------|---------|--------|
-| 1 | Add `ensureRAG` / `isRAGReady` / `getRAGError` (cached promise; no boot download) | `frontend/src/runtime/client-rag.ts` | [x] |
-| 2 | On Send (live): start RAG in parallel with LLM; soft-fail never blocks chat | `frontend/src/chat/chat-client.ts` | [x] |
-| 3 | `retrieve(text)` → `formatPassages`; inject into last `user` prompt only (don't persist lore) | `chat-client.ts` | [x] |
-| 4 | Status line: “Loading lore…” / “Looking up lore…” (reuse chat error/status area) | `chat-client.ts` | [x] |
-| 5 | Note RAG on send path in architecture doc | `ARCHITECTURE.md` | [x] |
-| 6 | `npm run build` / `tsc` | frontend | [x] |
-| 7 | `/code-review` on the change | — | [x] (in-place) |
-| 8 | Commit + push Pages | — | [x] `0f5b70f` |
+| 1 | Write plan doc | `PLAN-rag-quality.md` | [x] |
+| 2 | `TOP_K=2`, `MIN_SCORE`, skip thin passages; log skip reason | `frontend/src/runtime/client-rag.ts` | [x] |
+| 3 | Skip thin section bodies when building index | `backend/rag.py` | [x] |
+| 4 | `extractFact` + `chat` temperature option | `frontend/src/runtime/client-llm.ts` | [x] |
+| 5 | Send path: retrieve → extract → inject fact (fallback passages); status + console | `frontend/src/chat/chat-client.ts` | [x] |
+| 6 | Note two-pass lore path in architecture | `ARCHITECTURE.md` | [x] |
+| 7 | `npm run build` / `tsc` | frontend | [x] |
+| 8 | `/code-review` on the change | — | [x] (in-place) |
+| 9 | Commit + push Pages | — | [ ] (ask first) |
 
 ### Review notes (post-impl)
 
 | Severity | Finding | Follow-up |
 |----------|---------|-----------|
-| Low | RAG status and LLM progress fight the same status line while both cold | Fine for now; optional dedicated lore chip later |
-| Low | `bge` embedder runs on main thread | Worker later if UI janks |
-| Note | Local `vite` without `rag-index.json` soft-fails (CI still builds the index for Pages) | Expected |
+| Note | `MIN_SCORE=0.4` may need tuning from console `RAG retrieve: skipped` / hit scores | Adjust if real lore is skipped |
+| Note | Fact extract adds one WebLLM call latency on lore hits | Expected; status shows “Checking lore…” |
+| Note | Thin-body filter in `rag.py` applies on next CI index rebuild | Client also filters thin docs from old JSON |
 
 ### Done when
 
-- [x] First live Send lazy-loads RAG once; later Sends reuse it
-- [x] Canon passages reach the model; saved messages stay plain text
-- [x] Missing/failed RAG still allows chat
+- [x] At most 2 hits above score floor (or none for weak queries)
+- [x] Fact extract runs on lore hits; character gets fact (or soft fallback)
+- [x] Chitchat temp stays ~0.7; lore/fact path uses lower temp
 - [x] Build passes
 
 ---

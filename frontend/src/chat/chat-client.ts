@@ -6,11 +6,18 @@ import {
 import { STAR_JA, fighters, type CharacterId, type Fighter } from "../characters/characters";
 import { setFighterIdentity } from "../characters/identity";
 import { frozenChat, sampleFor } from "./sample";
-import { ensureLLM, chat, isLLMReady } from "../runtime/client-llm";
+import {
+  ensureLLM,
+  chat,
+  extractFact,
+  isLLMReady,
+  LORE_TEMPERATURE,
+} from "../runtime/client-llm";
 import {
   ensureRAG,
   retrieve,
   formatPassages,
+  formatFact,
   isRAGReady,
 } from "../runtime/client-rag";
 import { assessDevice, type DeviceAssessment } from "../runtime/device-capability";
@@ -544,7 +551,7 @@ export function createChat(opts: { onClose: () => void }) {
     return next;
   }
 
-  /** Prepend lore to the last user turn for the model only (UI/history stay plain). */
+  /** Prepend lore/fact to the last user turn for the model only (UI/history stay plain). */
   function withLorePrompt<T extends { role: string; content: string }>(
     msgs: T[],
     lore: string,
@@ -581,7 +588,14 @@ export function createChat(opts: { onClose: () => void }) {
     }
   }
 
-  async function loreForQuestion(text: string, current: number): Promise<string | null> {
+  /**
+   * Retrieve → same-engine fact extract → character lore block.
+   * Soft-fails to passages or null; never throws.
+   */
+  async function loreForQuestion(
+    text: string,
+    current: number,
+  ): Promise<{ lore: string; temperature: number } | null> {
     const ready = await prepareRagSoft(current);
     if (current !== token || !ready) {
       console.log("RAG lookup skipped (not ready)");
@@ -607,10 +621,20 @@ export function createChat(opts: { onClose: () => void }) {
           preview: p.text.trim().slice(0, 160),
         })),
       );
-      // No separate summary agent — formatPassages is the block injected into the character prompt.
-      const lore = formatPassages(passages);
-      console.log("RAG prompt for character model:\n", lore);
-      return lore;
+
+      if (current === token) {
+        error = "Checking lore…";
+        render();
+      }
+      const fact = await extractFact(text, passages);
+      if (current !== token) return null;
+
+      const lore = fact ? formatFact(fact) : formatPassages(passages);
+      console.log(
+        fact ? "RAG prompt for character model (fact):\n" : "RAG prompt for character model (passages fallback):\n",
+        lore,
+      );
+      return { lore, temperature: LORE_TEMPERATURE };
     } catch (err) {
       console.warn("RAG retrieve failed; continuing without lore:", err);
       return null;
@@ -701,7 +725,7 @@ export function createChat(opts: { onClose: () => void }) {
           return;
         }
 
-        const lore = await loreForQuestion(text, current);
+        const loreResult = await loreForQuestion(text, current);
         if (current !== token) return;
         error = "";
         render();
@@ -719,33 +743,38 @@ export function createChat(opts: { onClose: () => void }) {
             .filter((m) => m.role === "user" || m.role === "assistant")
             .map((m) => ({ role: m.role, content: m.content })),
         ];
-        contextMessages = withLorePrompt(capHistory(contextMessages), lore ?? "");
+        contextMessages = withLorePrompt(capHistory(contextMessages), loreResult?.lore ?? "");
 
         let assistantIndex = -1;
-        const aiResponse = await chat(character, contextMessages, {
-          onToken: (tokenText) => {
-            if (assistantIndex < 0) {
-              messages = [...messages, { role: "assistant", content: tokenText, speaker: character }];
-              assistantIndex = messages.length - 1;
-            } else {
-              const next = messages.slice();
-              const currentMsg = next[assistantIndex];
-              next[assistantIndex] = { ...currentMsg, content: currentMsg.content + tokenText };
-              messages = next;
-            }
-            render();
+        const aiResponse = await chat(
+          character,
+          contextMessages,
+          {
+            onToken: (tokenText) => {
+              if (assistantIndex < 0) {
+                messages = [...messages, { role: "assistant", content: tokenText, speaker: character }];
+                assistantIndex = messages.length - 1;
+              } else {
+                const next = messages.slice();
+                const currentMsg = next[assistantIndex];
+                next[assistantIndex] = { ...currentMsg, content: currentMsg.content + tokenText };
+                messages = next;
+              }
+              render();
+            },
+            onComplete: (fullText) => {
+              console.log("AI response complete:", fullText);
+            },
+            onError: (err) => {
+              console.error("AI error:", err);
+              phase = "ready";
+              error = err.message || "The local model didn't answer. Try sending again.";
+              render();
+              input.focus();
+            },
           },
-          onComplete: (fullText) => {
-            console.log("AI response complete:", fullText);
-          },
-          onError: (err) => {
-            console.error("AI error:", err);
-            phase = "ready";
-            error = err.message || "The local model didn't answer. Try sending again.";
-            render();
-            input.focus();
-          },
-        });
+          loreResult ? { temperature: loreResult.temperature } : undefined,
+        );
 
         if (assistantIndex < 0 && aiResponse) {
           messages = [...messages, { role: "assistant", content: aiResponse, speaker: character }];

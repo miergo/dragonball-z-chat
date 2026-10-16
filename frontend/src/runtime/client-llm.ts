@@ -4,6 +4,15 @@ import { CreateMLCEngine, ChatCompletionMessageParam } from "@mlc-ai/web-llm";
 export const MODEL_ID = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
 
 const MAX_TOKENS = 384;
+const DEFAULT_TEMPERATURE = 0.7;
+/** Lower creativity when a canon fact/passages are in the prompt. */
+export const LORE_TEMPERATURE = 0.35;
+const FACT_MAX_TOKENS = 96;
+
+const FACT_SYSTEM = `You extract answers from Dragon Ball canon passages.
+Reply with one short factual sentence only.
+Use only the passages. Do not roleplay or stay in character.
+If the passages do not answer the question, reply with exactly: UNKNOWN`;
 
 const SYSTEM_PROMPTS: Record<string, string> = {
   frieza: `You are Frieza from Dragon Ball Z. Reply in English only.
@@ -48,6 +57,15 @@ export interface LLMCallbacks {
   onError?: (error: Error) => void;
 }
 
+export interface ChatOptions {
+  temperature?: number;
+}
+
+export interface FactPassage {
+  source: string;
+  text: string;
+}
+
 /** @deprecated Prefer ensureLLM — same behavior. */
 export async function initLLM(callbacks?: LLMCallbacks): Promise<void> {
   return ensureLLM(callbacks);
@@ -86,10 +104,48 @@ export async function ensureLLM(callbacks?: LLMCallbacks): Promise<void> {
   return initPromise;
 }
 
+/**
+ * Cold fact extract from passages (same WebLLM engine, no character voice).
+ * Returns null for UNKNOWN / empty / failure — caller soft-falls back.
+ */
+export async function extractFact(
+  question: string,
+  passages: FactPassage[],
+): Promise<string | null> {
+  if (!engine || !initialized) throw new Error("LLM not initialized");
+  if (!passages.length) return null;
+
+  const blocks = passages.map((p) => `[${p.source}]\n${p.text.trim()}`).join("\n\n");
+  const messages: ChatCompletionMessageParam[] = [
+    { role: "system", content: FACT_SYSTEM },
+    {
+      role: "user",
+      content: `Passages:\n${blocks}\n\nQuestion:\n${question}`,
+    },
+  ];
+
+  try {
+    const response = await engine.chat.completions.create({
+      messages,
+      stream: false,
+      temperature: 0.1,
+      max_tokens: FACT_MAX_TOKENS,
+    });
+    const text = (response.choices[0]?.message?.content || "").trim();
+    console.log("RAG fact extract:", text || "(empty)");
+    if (!text || /^UNKNOWN\b/i.test(text)) return null;
+    return text;
+  } catch (error) {
+    console.warn("RAG fact extract failed:", error);
+    return null;
+  }
+}
+
 export async function chat(
   characterId: string,
   messages: ChatCompletionMessageParam[],
-  callbacks?: LLMCallbacks
+  callbacks?: LLMCallbacks,
+  options?: ChatOptions,
 ): Promise<string> {
   if (!engine || !initialized) throw new Error("LLM not initialized");
 
@@ -102,12 +158,13 @@ export async function chat(
   ];
 
   let fullText = "";
+  const temperature = options?.temperature ?? DEFAULT_TEMPERATURE;
 
   try {
     const response = await engine.chat.completions.create({
       messages: fullMessages,
       stream: true,
-      temperature: 0.7,
+      temperature,
       max_tokens: MAX_TOKENS,
     });
 

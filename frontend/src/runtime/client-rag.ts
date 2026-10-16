@@ -5,7 +5,12 @@ env.allowLocalModels = false;
 
 const QUERY_PREFIX = "Represent this sentence for searching relevant passages: ";
 const CANDIDATES = 40;
-const TOP_K = 5;
+/** Keep the character prompt short — 1.5B ignores long multi-hit dumps. */
+const TOP_K = 2;
+/** Cosine floor; weak queries like "hi" fall below and return no lore. */
+const MIN_SCORE = 0.4;
+/** Drop heading-only / stub bodies (e.g. "Appearance\\n\\nPersonality"). */
+const MIN_BODY_CHARS = 80;
 
 let indexData: {
   documents: string[];
@@ -99,20 +104,44 @@ async function embedQuery(query: string): Promise<number[]> {
   return Array.from(clsEmbedding.data);
 }
 
+function bodyLength(document: string): number {
+  const parts = document.split("\n\n");
+  const body = parts.length > 1 ? parts.slice(1).join("\n\n") : document;
+  return body.trim().length;
+}
+
+function isThinDocument(document: string): boolean {
+  return bodyLength(document) < MIN_BODY_CHARS;
+}
+
 export async function retrieve(query: string): Promise<Passage[]> {
   if (!initialized || !indexData) throw new Error("RAG not initialized");
 
   const queryEmbedding = await embedQuery(query);
 
-  const similarities = indexData.embeddings.map((docEmbedding, index) => ({
-    index,
-    score: cosineSimilarity(queryEmbedding, docEmbedding),
-  }));
+  const similarities = indexData.embeddings
+    .map((docEmbedding, index) => ({
+      index,
+      score: cosineSimilarity(queryEmbedding, docEmbedding),
+    }))
+    .filter(({ index }) => !isThinDocument(indexData!.documents[index]));
 
   similarities.sort((a, b) => b.score - a.score);
-  const topCandidates = similarities.slice(0, CANDIDATES);
 
-  const passages: Passage[] = topCandidates.slice(0, TOP_K).map(({ index, score }) => {
+  if (!similarities.length) {
+    console.log("RAG retrieve: no non-thin passages");
+    return [];
+  }
+
+  const best = similarities[0].score;
+  if (best < MIN_SCORE) {
+    console.log(
+      `RAG retrieve: skipped (best score ${best.toFixed(4)} < ${MIN_SCORE})`,
+    );
+    return [];
+  }
+
+  const passages: Passage[] = similarities.slice(0, TOP_K).map(({ index, score }) => {
     const meta = indexData!.metadatas[index];
     return {
       source: meta.source,
@@ -134,6 +163,15 @@ export function formatPassages(passages: Passage[]): string {
     "If the passages do not contain the answer, say you do not know, still in that voice. " +
     "Do not merge different characters or forms.";
   return "Canon passages:\n" + instruction + "\n\n" + blocks.join("\n\n");
+}
+
+/** Short fact block for the character model after extractFact succeeds. */
+export function formatFact(fact: string): string {
+  return (
+    "Canon fact (use this; do not invent a different answer):\n" +
+    fact.trim() +
+    "\n\nReply in the voice you were given, in a few short sentences."
+  );
 }
 
 export function isRAGReady(): boolean {

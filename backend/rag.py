@@ -136,6 +136,9 @@ def load_documents(canon_dir: Path):
             continue
         title, sections = _sections(text)
         for section, body in sections:
+            # Heading-only stubs ("Appearance" / "Personality") poison retrieval.
+            if len(body.strip()) < 80:
+                continue
             documents.append(
                 Document(
                     page_content=body,
