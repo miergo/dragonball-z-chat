@@ -1,23 +1,22 @@
 import {
-  deleteSession,
-  getSession,
-  greet,
-  listSessions,
-  openSession,
-  sendMessage,
   type ChatMessage,
-  type SendEvent,
   type Session,
   type SessionSummary,
 } from "../api/api";
 import { STAR_JA, fighters, type CharacterId, type Fighter } from "../characters/characters";
 import { setFighterIdentity } from "../characters/identity";
 import { frozenChat, sampleFor } from "./sample";
-import { createRag } from "../runtime/client-rag";
-import { initLLM, chat, type LLMCallbacks } from "../runtime/client-llm";
-import { initSessions, createSession as createLocalSession, getSession as getLocalSession, listSessions as listLocalSessions, saveMessage as saveLocalMessage, setPartner as setLocalPartner, deleteSession as deleteLocalSession, loadMemory, saveMemory, isInitialized as isSessionsInitialized } from "../runtime/client-sessions";
-
-import * as sqljs from "sql.js";
+import { initLLM, chat } from "../runtime/client-llm";
+import {
+  initSessions,
+  createSession as createLocalSession,
+  getSession as getLocalSession,
+  listSessions as listLocalSessions,
+  saveMessage as saveLocalMessage,
+  setPartner as setLocalPartner,
+  deleteSession as deleteLocalSession,
+  loadMemory,
+} from "../runtime/client-sessions";
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const LEAVE_MS = 660;
@@ -465,29 +464,44 @@ export function createChat(opts: { onClose: () => void }) {
     }
   }
 
+  function toApiSession(local: {
+    id: string;
+    character: string;
+    partner?: string | null;
+    messages: { role: "user" | "assistant"; content: string; speaker?: string }[];
+  }): Session {
+    const character = local.character as CharacterId;
+    return {
+      id: local.id,
+      character,
+      partner: (local.partner ?? null) as Session["partner"],
+      messages: local.messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        speaker: (m.speaker ?? (m.role === "user" ? "user" : character)) as ChatMessage["speaker"],
+      })),
+    };
+  }
+
   async function load(person: Fighter, fresh: boolean, current: number, id?: string): Promise<void> {
     if (!person.id) return;
 
     try {
+      await initSessions();
+
       let session: Session;
       if (id) {
-        session = await getSession(id);
+        const local = getLocalSession(id);
+        if (!local) throw new Error("Session not found");
+        session = toApiSession(local);
       } else {
-        session = createLocalSession(person.id, fresh) as Session;
+        session = toApiSession(createLocalSession(person.id, fresh));
       }
 
       if (current !== token) return;
       takeSession(session);
       error = "";
-
-      if (messages.length === 0) {
-        phase = "greeting";
-        render();
-        const greeted = await greet(session.id, nextSignal());
-        if (current !== token) return;
-        takeSession(greeted);
-      }
-
+      // No Python greet on Pages — start ready with whatever messages exist.
       phase = "ready";
       refreshHistory(person, current);
     } catch (err) {
@@ -504,16 +518,16 @@ export function createChat(opts: { onClose: () => void }) {
       .then(() => console.log("Local DB initialized"))
       .catch((err) => console.error("Failed to initialize local DB:", err));
 
-    void initLLM(
-      {
-        onProgress: (progress, message) => {
-          console.log(`LLM progress: ${Math.round(progress * 100)}% - ${message}`);
-        },
-      }
-    )
+    void initLLM({
+      onProgress: (progress, message) => {
+        console.log(`LLM progress: ${Math.round(progress * 100)}% - ${message}`);
+      },
+    })
       .then(() => console.log("LLM engine initialized"))
       .catch((err) => console.error("Failed to initialize LLM:", err));
   }
+
+  initializeLocalApp();
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
