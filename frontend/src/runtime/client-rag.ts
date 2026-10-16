@@ -13,12 +13,16 @@ let indexData: {
 let tokenizer: any = null;
 let model: any = null;
 let initialized = false;
+let initPromise: Promise<void> | null = null;
+let lastError: Error | null = null;
 
 export interface Passage {
   source: string;
   title: string;
   text: string;
 }
+
+export type RagProgressCallback = (progress: number, message: string) => void;
 
 function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
@@ -32,26 +36,47 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-export async function initRAG(onProgress?: (progress: number) => void): Promise<void> {
+/** @deprecated Prefer ensureRAG — same behavior. */
+export async function initRAG(onProgress?: RagProgressCallback): Promise<void> {
+  return ensureRAG(onProgress);
+}
+
+/** Load rag-index + embedder once. No-op if already ready. */
+export async function ensureRAG(onProgress?: RagProgressCallback): Promise<void> {
   if (initialized) return;
+  if (initPromise) return initPromise;
 
-  onProgress?.(0.1);
+  lastError = null;
+  initPromise = (async () => {
+    try {
+      onProgress?.(0.05, "Fetching lore index…");
 
-  const response = await fetch(`${import.meta.env.BASE_URL}rag-index.json`);
-  if (!response.ok) throw new Error("Failed to load rag-index.json");
-  indexData = await response.json();
+      const response = await fetch(`${import.meta.env.BASE_URL}rag-index.json`);
+      if (!response.ok) throw new Error("Failed to load rag-index.json");
+      indexData = await response.json();
 
-  onProgress?.(0.3);
+      onProgress?.(0.35, "Loading lore embedder…");
 
-  tokenizer = await AutoTokenizer.from_pretrained("Xenova/bge-base-en-v1.5");
-  model = await BertModel.from_pretrained("Xenova/bge-base-en-v1.5", {
-    quantized: true,
-  });
+      tokenizer = await AutoTokenizer.from_pretrained("Xenova/bge-base-en-v1.5");
+      model = await BertModel.from_pretrained("Xenova/bge-base-en-v1.5", {
+        quantized: true,
+      });
 
-  onProgress?.(0.8);
+      initialized = true;
+      lastError = null;
+      onProgress?.(1.0, "Lore ready");
+    } catch (error) {
+      initPromise = null;
+      indexData = null;
+      tokenizer = null;
+      model = null;
+      initialized = false;
+      lastError = error instanceof Error ? error : new Error(String(error));
+      throw lastError;
+    }
+  })();
 
-  initialized = true;
-  onProgress?.(1.0);
+  return initPromise;
 }
 
 async function embedQuery(query: string): Promise<number[]> {
@@ -83,36 +108,42 @@ export async function retrieve(query: string): Promise<Passage[]> {
   similarities.sort((a, b) => b.score - a.score);
   const topCandidates = similarities.slice(0, CANDIDATES);
 
-  const passages: Passage[] = topCandidates
-    .slice(0, TOP_K)
-    .map(({ index }) => {
-      const meta = indexData!.metadatas[index];
-      return {
-        source: meta.source,
-        title: meta.title,
-        text: indexData!.documents[index],
-      };
-    });
+  const passages: Passage[] = topCandidates.slice(0, TOP_K).map(({ index }) => {
+    const meta = indexData!.metadatas[index];
+    return {
+      source: meta.source,
+      title: meta.title,
+      text: indexData!.documents[index],
+    };
+  });
 
   return passages;
 }
 
 export function formatPassages(passages: Passage[]): string {
   const blocks = passages.map((p) => `[${p.source}]\n${p.text.trim()}`);
-  const instruction = (
+  const instruction =
     "Use these passages only for names and events. " +
     "Reply in the voice you were given, in a few short sentences. " +
     'Do not write a summary, name a saga, or say "the Z Fighters." ' +
     "If the passages do not contain the answer, say you do not know, still in that voice. " +
-    "Do not merge different characters or forms."
-  );
+    "Do not merge different characters or forms.";
   return "Canon passages:\n" + instruction + "\n\n" + blocks.join("\n\n");
+}
+
+export function isRAGReady(): boolean {
+  return initialized;
+}
+
+export function getRAGError(): Error | null {
+  return lastError;
 }
 
 export function isInitialized(): boolean {
   return initialized;
 }
 
-export async function createRag(onProgress?: (progress: number) => void): Promise<void> {
-  return initRAG(onProgress);
+/** @deprecated Prefer ensureRAG. */
+export async function createRag(onProgress?: RagProgressCallback): Promise<void> {
+  return ensureRAG(onProgress);
 }

@@ -29,7 +29,7 @@ Visitors never hit a Python server. CI uses Python only at **build time** to reb
   │  UI: reel → summon → chat                                │
   │  Sessions: sql.js + localStorage                         │
   │  LLM: WebLLM Qwen2.5-1.5B (WebGPU)                       │
-  │  RAG module: exists, NOT wired into send yet             │
+  │  RAG: lazy ensureRAG + retrieve on send (soft-fail)      │
   │  SW: cache wasm/json; network-first HTML                 │
   └──────────────────────────────────────────────────────────┘
 ```
@@ -86,21 +86,25 @@ dragonball-z-chat/
 ```
 user text
   → saveLocalMessage (sql.js)
+  → ensureLLM (lazy) + ensureRAG (lazy, soft-fail)
+  → retrieve(user text) → formatPassages (skipped if RAG fails)
   → optional memory from loadMemory()
   → conversation history ending in user message
+  → inject lore into last user prompt for the model only
   → client-llm.chat(character, messages)
        prepends character SYSTEM_PROMPTS[id]
        streams tokens via WebLLM
-  → save assistant message
+  → save assistant message (plain text; lore not persisted)
 ```
 
-**Not on the path today:** `client-rag.retrieve()` / `formatPassages()`.
+See [PLAN-rag-wireup.md](./PLAN-rag-wireup.md).
 
 ### Model
 
-- **ID:** `Qwen2.5-1.5B-Instruct-q4f16_1-MLC`
+- **ID:** `Qwen2.5-0.5B-Instruct-q4f16_1-MLC` (~0.9 GB VRAM est.)
 - **Engine:** `@mlc-ai/web-llm` + WebGPU
-- First visit downloads ~800MB+ weights into browser cache; later loads are faster
+- First visit downloads weights into browser cache; later loads are faster
+- Gated by `assessDevice()` (WebGPU adapter + RAM heuristic)
 
 ### Sessions
 
@@ -141,19 +145,23 @@ sequenceDiagram
   participant U as User
   participant UI as chat-client
   participant S as client-sessions
+  participant R as client-rag
   participant L as client-llm
   participant GPU as WebGPU/WebLLM
 
   U->>UI: Open Frieza
   UI->>S: initSessions / createSession
-  UI->>L: initLLM (download/load model)
   U->>UI: Send message
   UI->>S: save user message
-  UI->>L: chat(history + user)
+  par Lazy load
+    UI->>L: ensureLLM
+    UI->>R: ensureRAG (soft-fail)
+  end
+  UI->>R: retrieve + formatPassages
+  UI->>L: chat(history + lore-injected user)
   L->>GPU: completions.stream
   GPU-->>UI: tokens
   UI->>S: save assistant message
-  Note over UI: RAG retrieve not called yet
 ```
 
 ---
@@ -169,7 +177,7 @@ sequenceDiagram
 | BASE_URL for assets / wasm | Working |
 | SW HTML freshness | Working (v2) |
 | Frozen sample fallback | Code present; **not** forced in CI |
-| Client RAG module | **Implemented, unused on send** |
+| Client RAG module | **Wired on send** (lazy + soft-fail) |
 | Non-WebGPU live chat | UI loads; LLM init fails — no graceful frozen fallback on detect |
 | Duo / partner streaming | Legacy API ideas remain; local path is single-speaker |
 | Progress UI for model load | Console only |
@@ -180,16 +188,9 @@ sequenceDiagram
 
 Ordered by impact for the next steps you mentioned (wire RAG, then harden).
 
-### A. Wire client RAG into send (next)
+### A. Wire client RAG into send — done
 
-1. `await initRAG()` once (lazy on first send or parallel with `initLLM`)
-2. On send: `passages = await retrieve(text)` → `formatPassages(passages)`
-3. Inject as a **user** (or system) block *before* the latest user message, e.g.:
-
-   `[canon passages…]` then `user: <question>`
-
-4. Keep WebLLM rule: **last** message must be `user`
-5. Show a small “Using lore: …” affordance so users know retrieval ran
+See [PLAN-rag-wireup.md](./PLAN-rag-wireup.md). Soft-fail + status line shipped; optional “Using lore: …” chip still open if UX wants it.
 
 ### B. Clear runtime modes
 
@@ -251,8 +252,8 @@ Browser owns inference + session UX for visitors.
 
 ## 8. Suggested next milestone
 
-1. **Capability gate + small WebLLM** (left branch) — see [PLAN-webllm-capability.md](./PLAN-webllm-capability.md)
-2. **Wire RAG** into `generateAIResponse` (retrieve → format → inject → chat)
+1. ~~**Capability gate + small WebLLM**~~ — [PLAN-webllm-capability.md](./PLAN-webllm-capability.md)
+2. ~~**Wire RAG** into send~~ — [PLAN-rag-wireup.md](./PLAN-rag-wireup.md)
 3. **Frozen / soft fallback** when WebGPU or RAM fails (right branch stub)
 4. **IndexedDB** for session persistence
 5. Collapse dual chat clients behind one backend interface

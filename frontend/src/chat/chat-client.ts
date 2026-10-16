@@ -7,6 +7,12 @@ import { STAR_JA, fighters, type CharacterId, type Fighter } from "../characters
 import { setFighterIdentity } from "../characters/identity";
 import { frozenChat, sampleFor } from "./sample";
 import { ensureLLM, chat, isLLMReady } from "../runtime/client-llm";
+import {
+  ensureRAG,
+  retrieve,
+  formatPassages,
+  isRAGReady,
+} from "../runtime/client-rag";
 import { assessDevice, type DeviceAssessment } from "../runtime/device-capability";
 import {
   initSessions,
@@ -538,6 +544,60 @@ export function createChat(opts: { onClose: () => void }) {
     return next;
   }
 
+  /** Prepend lore to the last user turn for the model only (UI/history stay plain). */
+  function withLorePrompt<T extends { role: string; content: string }>(
+    msgs: T[],
+    lore: string,
+  ): T[] {
+    if (!lore || msgs.length === 0) return msgs;
+    const last = msgs[msgs.length - 1];
+    if (last.role !== "user") return msgs;
+    const next = msgs.slice();
+    next[next.length - 1] = {
+      ...last,
+      content: `${lore}\n\nQuestion:\n${last.content}`,
+    };
+    return next;
+  }
+
+  /** Lazy RAG load — never throws; chat continues without lore on failure. */
+  async function prepareRagSoft(current: number): Promise<boolean> {
+    if (isRAGReady()) return true;
+    try {
+      if (current === token) {
+        error = "Loading lore…";
+        render();
+      }
+      await ensureRAG((progress, message) => {
+        if (current !== token) return;
+        console.log(`RAG progress: ${Math.round(progress * 100)}% - ${message}`);
+        error = `Loading lore… ${Math.round(progress * 100)}% — ${message}`;
+        render();
+      });
+      return current === token && isRAGReady();
+    } catch (err) {
+      console.warn("RAG unavailable; continuing without lore:", err);
+      return false;
+    }
+  }
+
+  async function loreForQuestion(text: string, current: number): Promise<string | null> {
+    const ready = await prepareRagSoft(current);
+    if (current !== token || !ready) return null;
+    try {
+      if (current === token) {
+        error = "Looking up lore…";
+        render();
+      }
+      const passages = await retrieve(text);
+      if (!passages.length) return null;
+      return formatPassages(passages);
+    } catch (err) {
+      console.warn("RAG retrieve failed; continuing without lore:", err);
+      return null;
+    }
+  }
+
   async function prepareLiveModel(current: number): Promise<boolean> {
     const assessment = deviceAssessment ?? (await assessDevice());
     deviceAssessment = assessment;
@@ -611,13 +671,21 @@ export function createChat(opts: { onClose: () => void }) {
         const character = fighter?.id;
         if (!character || !sid) throw new Error("No character selected");
 
+        // Warm RAG alongside the LLM when both are cold (RAG soft-fails).
+        const ragWarm = prepareRagSoft(current);
         const ready = await prepareLiveModel(current);
+        await ragWarm;
         if (current !== token) return;
         if (!ready) {
           phase = "ready";
           render();
           return;
         }
+
+        const lore = await loreForQuestion(text, current);
+        if (current !== token) return;
+        error = "";
+        render();
 
         // WebLLM requires the last message to be `user` (or tool).
         const memory = loadMemory(character).trim();
@@ -632,7 +700,7 @@ export function createChat(opts: { onClose: () => void }) {
             .filter((m) => m.role === "user" || m.role === "assistant")
             .map((m) => ({ role: m.role, content: m.content })),
         ];
-        contextMessages = capHistory(contextMessages);
+        contextMessages = withLorePrompt(capHistory(contextMessages), lore ?? "");
 
         let assistantIndex = -1;
         const aiResponse = await chat(character, contextMessages, {
