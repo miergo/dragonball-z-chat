@@ -1,12 +1,15 @@
 import { CreateMLCEngine, ChatCompletionMessageParam } from "@mlc-ai/web-llm";
 
-const MODEL_ID = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC";
+/** Small low-resource model (~0.9 GB VRAM est.) — see PLAN-webllm-capability.md */
+export const MODEL_ID = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+const MAX_TOKENS = 256;
 
 const SYSTEM_PROMPTS: Record<string, string> = {
   frieza: `You are Frieza from Dragon Ball Z. Reply in English only.
 Speak in first person as Frieza: cold, polite, arrogant.
 Do not describe a beard, mustache, or stroking facial hair. Frieza has none.
-Do not narrate long *actions*. Keep replies short.
+Do not narrate long *actions*. Keep replies to 1–3 short sentences.
 For lore questions: state the correct names and facts first, then stay in character. Do not invent alternate creators or killers.
 Use only Dragon Ball and Dragon Ball Z. Do not use Dragon Ball GT or Dragon Ball Super.
 
@@ -22,7 +25,7 @@ You are a Namekian warrior, son and reincarnation of King Piccolo. You were once
 You trained Gohan and care about him like family, but you rarely say so. Show it through gruff advice, not warmth.
 You are analytical in battle. When asked about a fight, name the weakness or the strategy.
 You fused with Nail on Namek and later with Kami. You prefer meditation, solitude, and water. You have no interest in romance; call it "mushy stuff".
-Do not narrate long *actions*. Keep replies short.
+Do not narrate long *actions*. Keep replies to 1–3 short sentences.
 For lore questions: state the correct names and facts first, then stay in character. Do not invent alternate creators or killers.
 Use only Dragon Ball and Dragon Ball Z. Do not use Dragon Ball GT or Dragon Ball Super.
 
@@ -38,7 +41,7 @@ Speak like a happy, naive child. Call yourself "Buu" instead of "I" (for example
 You love candy, chocolate, cake, and pudding more than anything. You do not like sharing your sweets. If someone asks for them, refuse, like: "No! That is Buu's candy!" You get grumpy if someone takes them or makes fun of you, but you calm down.
 Mr. Satan is your best friend. Bee is your puppy. You promised Mr. Satan you would not kill anymore, and you keep that promise.
 Babidi used to boss you around. You do not like him. You like people who are nice to you, like Goku and Mr. Satan.
-Do not narrate long *actions*. Keep replies short.
+Do not narrate long *actions*. Keep replies to 1–3 short sentences.
 For lore questions: state the correct names and facts first, then stay in character. Do not invent alternate creators or killers.
 Use only Dragon Ball and Dragon Ball Z. Do not use Dragon Ball GT or Dragon Ball Super.
 
@@ -50,9 +53,10 @@ Answer these exactly, then stay in character:
 - Who destroyed Planet Vegeta? Reply that Frieza destroyed Planet Vegeta. Do not say Beerus.`,
 };
 
-let engine: any = null;
+let engine: Awaited<ReturnType<typeof CreateMLCEngine>> | null = null;
 let initialized = false;
 let initPromise: Promise<void> | null = null;
+let lastError: Error | null = null;
 
 export interface LLMCallbacks {
   onProgress?: (progress: number, message: string) => void;
@@ -61,27 +65,38 @@ export interface LLMCallbacks {
   onError?: (error: Error) => void;
 }
 
+/** @deprecated Prefer ensureLLM — same behavior. */
 export async function initLLM(callbacks?: LLMCallbacks): Promise<void> {
+  return ensureLLM(callbacks);
+}
+
+/** Load the small WebLLM engine once. No-op if already ready. */
+export async function ensureLLM(callbacks?: LLMCallbacks): Promise<void> {
   if (initialized) return;
   if (initPromise) return initPromise;
 
+  lastError = null;
   initPromise = (async () => {
     try {
       callbacks?.onProgress?.(0.05, "Initializing WebLLM engine...");
 
       engine = await CreateMLCEngine(MODEL_ID, {
-        initProgressCallback: (report: any) => {
+        initProgressCallback: (report: { progress: number; text?: string }) => {
           const progress = 0.05 + report.progress * 0.9;
           callbacks?.onProgress?.(progress, report.text || "Loading model...");
         },
       });
 
       initialized = true;
+      lastError = null;
       callbacks?.onProgress?.(1.0, "Model ready!");
     } catch (error) {
       initPromise = null;
-      callbacks?.onError?.(error as Error);
-      throw error;
+      engine = null;
+      initialized = false;
+      lastError = error instanceof Error ? error : new Error(String(error));
+      callbacks?.onError?.(lastError);
+      throw lastError;
     }
   })();
 
@@ -104,14 +119,13 @@ export async function chat(
   ];
 
   let fullText = "";
-  const chunkSize = 32;
 
   try {
     const response = await engine.chat.completions.create({
       messages: fullMessages,
       stream: true,
       temperature: 0.7,
-      max_tokens: 512,
+      max_tokens: MAX_TOKENS,
     });
 
     for await (const chunk of response) {
@@ -125,9 +139,18 @@ export async function chat(
     callbacks?.onComplete?.(fullText);
     return fullText;
   } catch (error) {
-    callbacks?.onError?.(error as Error);
-    throw error;
+    const err = error instanceof Error ? error : new Error(String(error));
+    callbacks?.onError?.(err);
+    throw err;
   }
+}
+
+export function isLLMReady(): boolean {
+  return initialized;
+}
+
+export function getLLMError(): Error | null {
+  return lastError;
 }
 
 export function isInitialized(): boolean {
@@ -144,5 +167,6 @@ export async function unload(): Promise<void> {
     engine = null;
     initialized = false;
     initPromise = null;
+    lastError = null;
   }
 }

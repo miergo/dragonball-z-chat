@@ -6,6 +6,7 @@ import { createChat } from "./chat/chat-client";
 import { createReel, type ReelState } from "./reel/reel";
 import { createSplash } from "./splash/splash";
 import { createSummon } from "./summon/summon";
+import { assessDevice } from "./runtime/device-capability";
 
 const state: ReelState = {
   index: 0,
@@ -73,11 +74,18 @@ function registerServiceWorker(): void {
 async function initApp() {
   registerServiceWorker();
 
-  if ("gpu" in navigator) {
-    console.log("WebGPU available, client-side LLM can initialize");
-  } else {
-    console.log("WebGPU not available, using frozen/fallback mode when needed");
-  }
+  // Probe only — does not download model weights.
+  void assessDevice().then((result) => {
+    if (result.tier === "live") {
+      console.log(
+        "Device capability: live WebLLM",
+        result.adapterInfo || "",
+        result.ramUnknown ? "(RAM unknown)" : "",
+      );
+    } else {
+      console.log("Device capability: unsupported —", result.reason);
+    }
+  });
 
   reel.start();
   reel.paint(false);

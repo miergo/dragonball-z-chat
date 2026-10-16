@@ -1,40 +1,59 @@
-# TASK: Fix "Sessions not initialized" on GitHub Pages
+# TASK tracker
 
-## Problem
+> **Process:** update this file with the checklist **before** coding. Then implement. Then `/code-review`. Then commit/push when asked.
 
-Opening a character chat on Pages shows **Sessions not initialized**. Console may only show WebGPU + favicon noise; the real failure is the local SQLite path never starts.
+---
 
-## Root cause
+## Done earlier
 
-1. `initializeLocalApp()` in `frontend/src/chat/chat-client.ts` calls `initSessions()` / `initLLM()` but **is never invoked**.
-2. `load()` calls `createLocalSession()` while `db` is still `null` → throws `"Sessions not initialized"`.
-3. Related: `load()` still uses the **Python API** (`getSession`, `greet`) for some branches. Those fail or race on static Pages; history already uses `listLocalSessions`.
+- [x] Sessions not initialized (call `initSessions`, local create/load, skip API greet)
+- [x] SW stale HTML / BASE_URL assets / real `sql-wasm.wasm`
+- [x] Send path ends with `user` role (MessageOrderError)
+- [x] Docs: `ARCHITECTURE.md`, `PLAN-webllm-capability.md`
 
-## Plan
+---
 
-| # | Change | File |
-|---|--------|------|
-| 1 | Call `initializeLocalApp()` once when `createChat()` runs | `chat-client.ts` |
-| 2 | `await initSessions()` at the start of `load()` (and ensure retry/new session wait) | `chat-client.ts` |
-| 3 | Use `getLocalSession` instead of API `getSession` when opening by id | `chat-client.ts` |
-| 4 | Skip API `greet()` on the local path; open an empty/ready session (LLM/form handles first reply) | `chat-client.ts` |
-| 5 | Build, commit, push so Pages redeploys | CI |
+## Current: Capability gate + small WebLLM
 
-## Out of scope (follow-ups)
+**Plan doc:** [PLAN-webllm-capability.md](./PLAN-webllm-capability.md)  
+**Scope:** left branch only — Device capability → WebGPU + RAM OK → Small WebLLM (lazy).  
+**Out of scope:** RAG wire-up, frozen fallback, HF Space, IndexedDB.
 
-- Full greeting via WebLLM on session start
-- Wiring RAG into every send
-- Favicon 404 (cosmetic)
+### Checklist (write these before coding)
 
-## Status
+| # | Task | File(s) | Status |
+|---|------|---------|--------|
+| 1 | Add `assessDevice()` (WebGPU `requestAdapter` + `deviceMemory` ≥ 4 GB heuristic, cached) | `frontend/src/runtime/device-capability.ts` | [x] |
+| 2 | Switch model to `Qwen2.5-0.5B-Instruct-q4f16_1-MLC`; add `ensureLLM` / `isLLMReady` / `getLLMError`; `max_tokens` 256 | `frontend/src/runtime/client-llm.ts` | [x] |
+| 3 | Remove eager `initLLM` from chat create; keep sessions-only early init | `frontend/src/chat/chat-client.ts` | [x] |
+| 4 | On chat open: assess device; on Send: if live → lazy `ensureLLM` + progress UI; if not → soft error (TODO frozen) | `chat-client.ts` | [x] |
+| 5 | Cap conversation history to last 8 messages (still end with `user`) | `chat-client.ts` | [x] |
+| 6 | Retry control for model load failure | `chat-client.ts` | [x] |
+| 7 | Early `assessDevice()` log in boot (no weight download) | `frontend/src/main.ts` | [x] |
+| 8 | `npm run build` / `tsc` | frontend | [x] |
+| 9 | `/code-review` on the change | — | [x] (in-place; Bugbot usage limited) |
+| 10 | Commit + push Pages | — | [x] |
 
-- [x] 1–4 implemented in `chat-client.ts` (call `initializeLocalApp`, await `initSessions`, local get/create, skip API greet)
-- [x] Redeploy after session-init push
-- [x] SW stale HTML: bump cache + network-first for documents (fixing 404s on old `assets/*.js` hashes)
-- [x] Fix send path: include user message so WebLLM last role is `user` (MessageOrderError)
+### Review notes (post-impl)
 
-## Done when
+| Severity | Finding | Follow-up |
+|----------|---------|-----------|
+| Medium | User message saved before model ready → orphan turn if load fails | Defer save until after `ensureLLM`, or roll back on fail |
+| Medium | Retry cannot clear cached `unsupported` assessment | Only useful after failed `ensureLLM` on `live` devices |
+| Fixed during review | `modelLoading` stuck true if user leaves mid-download | Cleared on token cancel |
 
-- Chat opens without the red "Sessions not initialized" banner
-- New session / history list work against sql.js in the browser
-- `npm run build` passes
+### Done when
+
+- [x] Capable devices load **0.5B** only after first Send (not on page load)
+- [x] Incapable devices never start model download; clear message shown
+- [x] Build passes
+- [x] Pushed for Pages deploy
+
+---
+
+## Next (do not start until this section is filled before coding)
+
+_When starting the next feature, replace this section with a fresh checklist first._
+
+- [ ] Wire client RAG into send
+- [ ] Frozen sample fallback when `tier !== "live"`

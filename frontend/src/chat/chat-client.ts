@@ -6,7 +6,8 @@ import {
 import { STAR_JA, fighters, type CharacterId, type Fighter } from "../characters/characters";
 import { setFighterIdentity } from "../characters/identity";
 import { frozenChat, sampleFor } from "./sample";
-import { initLLM, chat } from "../runtime/client-llm";
+import { ensureLLM, chat, isLLMReady } from "../runtime/client-llm";
+import { assessDevice, type DeviceAssessment } from "../runtime/device-capability";
 import {
   initSessions,
   createSession as createLocalSession,
@@ -17,6 +18,9 @@ import {
   deleteSession as deleteLocalSession,
   loadMemory,
 } from "../runtime/client-sessions";
+
+/** Keep WebLLM KV cache small on low-RAM devices. */
+const MAX_HISTORY_MESSAGES = 8;
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const LEAVE_MS = 660;
@@ -95,6 +99,10 @@ export function createChat(opts: { onClose: () => void }) {
   let emptyNote: HTMLElement | null = null;
   let historyFlight: AbortController | null = null;
   let historyButtons: { id: string; button: HTMLButtonElement }[] = [];
+  let deviceAssessment: DeviceAssessment | null = null;
+  /** Set when WebGPU/RAM gate fails — TODO: frozen fallback (right branch). */
+  let llmBlocked = false;
+  let modelLoading = false;
 
   function nextSignal(): AbortSignal {
     flight?.abort();
@@ -436,7 +444,7 @@ export function createChat(opts: { onClose: () => void }) {
   }
 
   function render(): void {
-    const busy = phase === "loading" || phase === "greeting" || phase === "sending";
+    const busy = phase === "loading" || phase === "greeting" || phase === "sending" || modelLoading;
     syncMessages(busy);
     syncEmpty();
     syncPending(busy);
@@ -445,7 +453,11 @@ export function createChat(opts: { onClose: () => void }) {
 
     errorText.textContent = error;
     errorBox.hidden = !error;
-    retry.hidden = !error || sessionId !== null;
+    // Show retry for session load failures (no session) or model load failures (has session).
+    retry.hidden = !error || (sessionId !== null && !llmBlocked && isLLMReady());
+    retry.textContent = llmBlocked || (!isLLMReady() && error.includes("local model"))
+      ? "Retry model"
+      : "Try again";
     confirmBox.hidden = !confirm;
 
     newBtn.hidden = frozenChat;
@@ -453,8 +465,8 @@ export function createChat(opts: { onClose: () => void }) {
     form.hidden = frozenChat;
     newBtn.disabled = busy || !fighter || frozenChat;
     deleteBtn.disabled = busy || !sessionId || frozenChat;
-    sendBtn.disabled = busy || !sessionId || confirm || frozenChat;
-    input.disabled = busy || !sessionId || confirm || frozenChat;
+    sendBtn.disabled = busy || !sessionId || confirm || frozenChat || llmBlocked;
+    input.disabled = busy || !sessionId || confirm || frozenChat || llmBlocked;
     for (const { id, button } of historyButtons) {
       const active = id === sessionId;
       button.classList[active ? "add" : "remove"]("is-current");
@@ -514,53 +526,82 @@ export function createChat(opts: { onClose: () => void }) {
   }
 
   function initializeLocalApp() {
+    // Sessions only — WebLLM stays lazy until capability OK + first send.
     void initSessions()
       .then(() => console.log("Local DB initialized"))
       .catch((err) => console.error("Failed to initialize local DB:", err));
+  }
 
-    void initLLM({
-      onProgress: (progress, message) => {
-        console.log(`LLM progress: ${Math.round(progress * 100)}% - ${message}`);
-      },
-    })
-      .then(() => console.log("LLM engine initialized"))
-      .catch((err) => console.error("Failed to initialize LLM:", err));
+  function capHistory<T extends { role: string }>(msgs: T[]): T[] {
+    let next = msgs.length > MAX_HISTORY_MESSAGES ? msgs.slice(-MAX_HISTORY_MESSAGES) : msgs.slice();
+    while (next.length > 1 && next[0].role === "assistant") next = next.slice(1);
+    return next;
+  }
+
+  async function prepareLiveModel(current: number): Promise<boolean> {
+    const assessment = deviceAssessment ?? (await assessDevice());
+    deviceAssessment = assessment;
+
+    if (assessment.tier !== "live") {
+      // TODO: frozen fallback (right branch)
+      llmBlocked = true;
+      error = assessment.reason || "This device can't run the local model.";
+      return false;
+    }
+
+    llmBlocked = false;
+    if (isLLMReady()) return true;
+
+    modelLoading = true;
+    error = "Loading local model…";
+    render();
+
+    try {
+      await ensureLLM({
+        onProgress: (progress, message) => {
+          if (current !== token) return;
+          console.log(`LLM progress: ${Math.round(progress * 100)}% - ${message}`);
+          error = `Loading local model… ${Math.round(progress * 100)}% — ${message}`;
+          render();
+        },
+      });
+      if (current !== token) {
+        modelLoading = false;
+        return false;
+      }
+      error = "";
+      modelLoading = false;
+      console.log("LLM engine initialized");
+      return true;
+    } catch (err) {
+      console.error("Failed to initialize LLM:", err);
+      modelLoading = false;
+      llmBlocked = true;
+      // TODO: frozen fallback (right branch)
+      error =
+        err instanceof Error
+          ? `This device couldn't load the local model. ${err.message}`
+          : "This device couldn't load the local model.";
+      return false;
+    }
   }
 
   initializeLocalApp();
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (frozenChat || !fighter || !sessionId || phase !== "ready" || confirm) return;
+    if (frozenChat || !fighter || !sessionId || phase !== "ready" || confirm || llmBlocked || modelLoading) {
+      return;
+    }
     const text = input.value.trim();
     if (!text) return;
     const current = token;
-    const draft = input.value;
     input.value = "";
     messages = [...messages, { role: "user", content: text, speaker: "user" }];
     pendingNext = undefined;
     phase = "sending";
     error = "";
     render();
-    let streamed = 0;
-    const onEvent = async (event: any) => {
-      if (current !== token) return;
-      if (event.partner && event.partner !== partnerId) {
-        partnerId = event.partner;
-        if (fighter) paintIdentity(fighter);
-      }
-      if (event.type === "start" || event.type === "line") {
-        if (event.next !== undefined) pendingNext = event.next;
-      }
-      if (event.type === "line" && event.message) {
-        streamed += 1;
-        const character = fighterFor(event.message);
-        if (character) {
-          messages = [...messages, { ...event.message, speaker: character.id }];
-        }
-      }
-      if (event.type === "start" || event.type === "line") render();
-    };
 
     const sid = sessionId;
     saveLocalMessage(sid, { role: "user", content: text, speaker: "user", timestamp: Date.now() });
@@ -570,10 +611,17 @@ export function createChat(opts: { onClose: () => void }) {
         const character = fighter?.id;
         if (!character || !sid) throw new Error("No character selected");
 
-        // WebLLM requires the last message to be `user` (or tool). Always end with
-        // the live transcript, which already includes this turn's user text.
+        const ready = await prepareLiveModel(current);
+        if (current !== token) return;
+        if (!ready) {
+          phase = "ready";
+          render();
+          return;
+        }
+
+        // WebLLM requires the last message to be `user` (or tool).
         const memory = loadMemory(character).trim();
-        const contextMessages = [
+        let contextMessages = [
           ...(memory
             ? ([
                 { role: "user" as const, content: `Remember this about prior chats:\n${memory}` },
@@ -584,11 +632,11 @@ export function createChat(opts: { onClose: () => void }) {
             .filter((m) => m.role === "user" || m.role === "assistant")
             .map((m) => ({ role: m.role, content: m.content })),
         ];
+        contextMessages = capHistory(contextMessages);
 
         let assistantIndex = -1;
         const aiResponse = await chat(character, contextMessages, {
           onToken: (tokenText) => {
-            streamed += 1;
             if (assistantIndex < 0) {
               messages = [...messages, { role: "assistant", content: tokenText, speaker: character }];
               assistantIndex = messages.length - 1;
@@ -624,6 +672,7 @@ export function createChat(opts: { onClose: () => void }) {
       } catch (err) {
         console.error("AI generation error:", err);
         phase = "ready";
+        modelLoading = false;
         error = err instanceof Error ? err.message : "The local model didn't answer. Try sending again.";
         render();
         input.focus();
@@ -686,7 +735,28 @@ export function createChat(opts: { onClose: () => void }) {
 
   retry.addEventListener("click", () => {
     if (!fighter?.id) return;
+
+    // Model / capability failure while a session exists: retry ensureLLM only.
+    if (sessionId && (llmBlocked || !isLLMReady())) {
+      llmBlocked = false;
+      error = "";
+      const current = ++token;
+      phase = "ready";
+      render();
+      void prepareLiveModel(current).then((ok) => {
+        if (current !== token) return;
+        if (ok) {
+          error = "";
+          llmBlocked = false;
+        }
+        render();
+        if (ok) input.focus();
+      });
+      return;
+    }
+
     error = "";
+    llmBlocked = false;
     phase = "loading";
     const current = ++token;
     render();
@@ -755,6 +825,8 @@ export function createChat(opts: { onClose: () => void }) {
       partnerId = null;
       error = "";
       confirm = false;
+      llmBlocked = false;
+      modelLoading = false;
       paintIdentity(person);
       hideReelCharacter();
       if (frozenChat && person.id) {
@@ -773,7 +845,29 @@ export function createChat(opts: { onClose: () => void }) {
       phase = "loading";
       historyNote("Loading sessions…");
       const current = ++token;
-      void load(person, false, current);
+      void (async () => {
+        error = "Checking device…";
+        render();
+        deviceAssessment = await assessDevice();
+        if (current !== token) return;
+        if (deviceAssessment.tier !== "live") {
+          // TODO: frozen fallback (right branch)
+          llmBlocked = true;
+        } else {
+          llmBlocked = false;
+          console.log(
+            "Device live for WebLLM",
+            deviceAssessment.adapterInfo || "",
+            deviceAssessment.ramUnknown ? "(RAM unknown)" : "",
+          );
+        }
+        await load(person, false, current);
+        if (current !== token) return;
+        if (llmBlocked) {
+          error = deviceAssessment.reason || "This device can't run the local model.";
+          render();
+        }
+      })();
     },
     reveal() {
       root.classList.add("is-open");
