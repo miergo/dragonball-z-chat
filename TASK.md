@@ -30,7 +30,8 @@ Opening a character chat on Pages shows **Sessions not initialized**. Console ma
 
 - [x] 1–4 implemented in `chat-client.ts` (call `initializeLocalApp`, await `initSessions`, local get/create, skip API greet)
 - [x] Redeploy after session-init push
-- [ ] SW stale HTML: bump cache + network-first for documents (fixing 404s on old `assets/*.js` hashes)
+- [x] SW stale HTML: bump cache + network-first for documents (fixing 404s on old `assets/*.js` hashes)
+- [x] Fix send path: include user message so WebLLM last role is `user` (MessageOrderError)
 
 ## Done when
 

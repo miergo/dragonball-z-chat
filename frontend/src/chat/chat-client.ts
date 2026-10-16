@@ -563,21 +563,41 @@ export function createChat(opts: { onClose: () => void }) {
     };
 
     const sid = sessionId;
+    saveLocalMessage(sid, { role: "user", content: text, speaker: "user", timestamp: Date.now() });
+
     const generateAIResponse = async () => {
       try {
         const character = fighter?.id;
         if (!character || !sid) throw new Error("No character selected");
 
-        const systemMessage = loadMemory(character);
-        const contextMessages = systemMessage
-          ? [{ role: "user" as const, content: systemMessage }]
-          : [];
+        // WebLLM requires the last message to be `user` (or tool). Always end with
+        // the live transcript, which already includes this turn's user text.
+        const memory = loadMemory(character).trim();
+        const contextMessages = [
+          ...(memory
+            ? ([
+                { role: "user" as const, content: `Remember this about prior chats:\n${memory}` },
+                { role: "assistant" as const, content: "Understood." },
+              ] as const)
+            : []),
+          ...messages
+            .filter((m) => m.role === "user" || m.role === "assistant")
+            .map((m) => ({ role: m.role, content: m.content })),
+        ];
 
+        let assistantIndex = -1;
         const aiResponse = await chat(character, contextMessages, {
           onToken: (tokenText) => {
             streamed += 1;
-            const message: ChatMessage = { role: "assistant", content: tokenText, speaker: character };
-            messages = [...messages, message];
+            if (assistantIndex < 0) {
+              messages = [...messages, { role: "assistant", content: tokenText, speaker: character }];
+              assistantIndex = messages.length - 1;
+            } else {
+              const next = messages.slice();
+              const currentMsg = next[assistantIndex];
+              next[assistantIndex] = { ...currentMsg, content: currentMsg.content + tokenText };
+              messages = next;
+            }
             render();
           },
           onComplete: (fullText) => {
@@ -592,6 +612,9 @@ export function createChat(opts: { onClose: () => void }) {
           },
         });
 
+        if (assistantIndex < 0 && aiResponse) {
+          messages = [...messages, { role: "assistant", content: aiResponse, speaker: character }];
+        }
         saveLocalMessage(sid, { role: "assistant", content: aiResponse, speaker: character, timestamp: Date.now() });
         setLocalPartner(sid, null);
         phase = "ready";
