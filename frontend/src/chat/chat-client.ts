@@ -583,15 +583,34 @@ export function createChat(opts: { onClose: () => void }) {
 
   async function loreForQuestion(text: string, current: number): Promise<string | null> {
     const ready = await prepareRagSoft(current);
-    if (current !== token || !ready) return null;
+    if (current !== token || !ready) {
+      console.log("RAG lookup skipped (not ready)");
+      return null;
+    }
     try {
       if (current === token) {
         error = "Looking up lore…";
         render();
       }
+      console.log("RAG lookup:", text);
       const passages = await retrieve(text);
-      if (!passages.length) return null;
-      return formatPassages(passages);
+      if (!passages.length) {
+        console.log("RAG hits: (none)");
+        return null;
+      }
+      console.log(
+        "RAG hits:",
+        passages.map((p) => ({
+          score: Number(p.score.toFixed(4)),
+          source: p.source,
+          title: p.title,
+          preview: p.text.trim().slice(0, 160),
+        })),
+      );
+      // No separate summary agent — formatPassages is the block injected into the character prompt.
+      const lore = formatPassages(passages);
+      console.log("RAG prompt for character model:\n", lore);
+      return lore;
     } catch (err) {
       console.warn("RAG retrieve failed; continuing without lore:", err);
       return null;

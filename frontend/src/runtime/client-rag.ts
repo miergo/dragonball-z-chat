@@ -23,6 +23,7 @@ export interface Passage {
   source: string;
   title: string;
   text: string;
+  score: number;
 }
 
 export type RagProgressCallback = (progress: number, message: string) => void;
@@ -111,12 +112,13 @@ export async function retrieve(query: string): Promise<Passage[]> {
   similarities.sort((a, b) => b.score - a.score);
   const topCandidates = similarities.slice(0, CANDIDATES);
 
-  const passages: Passage[] = topCandidates.slice(0, TOP_K).map(({ index }) => {
+  const passages: Passage[] = topCandidates.slice(0, TOP_K).map(({ index, score }) => {
     const meta = indexData!.metadatas[index];
     return {
       source: meta.source,
       title: meta.title,
       text: indexData!.documents[index],
+      score,
     };
   });
 
